@@ -66,12 +66,23 @@ impl Token {
         H_CARET.repeat(amount)
     }
 
+    pub fn len(&self) -> usize {
+        match self {
+            Token::HCaret(amount) => *amount,
+            Token::Space(amount) => *amount,
+            Token::Label(label) => label.len(),
+            Token::Styled(_, inner) => inner.as_ref().map_or(1, |b| b.len() + 1),
+            _ => 1,
+        }
+    }
+
     pub fn is_mergeable(&self) -> bool {
         matches!(
             self,
             Token::HCaret(_) | Token::Space(_) | Token::Label(_) | Token::Reset // Reset is mergeable because 2 or more resets are the same as 1 reset
         )
     }
+
     pub fn merge(&mut self, other: Token) -> Option<Token> {
         if !self.is_mergeable() || !other.is_mergeable() {
             return Some(other);
@@ -214,5 +225,13 @@ impl Display for Token {
             }
             Token::Reset => write!(f, "{RESET}"), // Reset color
         }
+    }
+}
+
+impl IntoIterator for Token {
+    type Item = Token;
+    type IntoIter = std::iter::Once<Token>;
+    fn into_iter(self) -> Self::IntoIter {
+        std::iter::once(self)
     }
 }

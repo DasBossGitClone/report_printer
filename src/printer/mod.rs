@@ -161,33 +161,10 @@ impl ArgumentErrorReport {
     }
 
     fn write_internal<W: Write>(self, writer: &mut W) -> io::Result<()> {
-        let ArgumentErrorReport {
-            input_label_offset,
-            raw_input,
-            input,
-            // Labels already sorted in the builder
-            mut labels,
-        } = self;
+        let caret_segments = self.generate_underbar()?;
 
-        let label_lines: Vec<LabelLine> =
-            Self::gather_lines(labels.len(), labels.into_iter(), input_label_offset);
-
-        let caret_segments = Self::generate_underbar(label_lines)?;
-
-        caret_segments.into_iter().try_for_each(|cs| {
-            if let Some(formatted) = cs.format() {
-                write!(writer, "{}", formatted.underbar_lines())?;
-                formatted.into_iter().try_for_each(|cl| {
-                    writeln!(writer, "{}", cl.main())?;
-                    if let Some(sep) = cl.separator() {
-                        return writeln!(writer, "{}", sep);
-                    }
-                    Ok(())
-                })
-            } else {
-                Ok(())
-            }
-        })?;
+        writeln!(writer, "{}", self.input)?;
+        write!(writer, "{}", caret_segments)?;
 
         Ok(())
     }

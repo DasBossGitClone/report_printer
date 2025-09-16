@@ -1,14 +1,8 @@
 use super::*;
 
-#[derive(Debug, Clone)]
-pub struct FormatterLabel {
-    pub message: TokenStream,
-    pub child_labels: Vec<TokenStream>,
-}
-
-#[derive(Debug, Clone)]
+/* #[derive(Debug, Clone)]
 pub struct ReportSegment {
-    caret: Caret,
+    caret: ReportCaret,
     label: FormatterLabel,
 }
 
@@ -28,3 +22,4 @@ impl Iterator for ReportSegments {
         }
     }
 }
+ */

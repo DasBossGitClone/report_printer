@@ -63,198 +63,16 @@ macro_rules! impl_field {
 }
 
 crate::impl_field!(
-    CaretBuilder,start,usize;
-    CaretBuilder,end,usize;
-    CaretBuilder,positions,Vec<usize>;
-    Caret,start,usize;
-    Caret,end,usize;
-    Caret,r_positions,Vec<usize>;
+    ReportCaret,start,usize;
+    ReportCaret,end,usize;
+    ReportCaret,r_positions,Vec<ReportLabel>;
+    UnderbarLine,underbar,TokenStream;
+    UnderbarLine,underbar_sep,TokenStream;
+    CaretLine,main,TokenStream;
+    ReportLabel,position,usize;
+    ReportLabel,message,TokenStream;
+    ReportLabel,child_labels,Vec<TokenStream>;
 );
-
-#[derive(Debug, Clone)]
-/// The vertical line character before the labels to visually connect them to the underbar
-pub struct CaretBuilder {
-    /// Start of underbar
-    start: usize,
-    /// End of underbar
-    end: usize,
-    /// The positions of the down facing connectors (┬) in the underbar
-    /// Relative to start
-    positions: Vec<usize>,
-}
-impl CaretBuilder {
-    pub fn new(start: usize, end: usize) -> Self {
-        Self {
-            start,
-            end,
-            positions: Vec::new(),
-        }
-    }
-    pub(super) fn push(&mut self, pos: usize) -> bool {
-        if pos > self.end.saturating_sub(self.start) {
-            false
-        } else {
-            self.positions.push(pos);
-            true
-        }
-    }
-    pub fn pop(&mut self) -> Option<usize> {
-        self.positions.pop()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.positions.is_empty()
-    }
-    pub fn len(&self) -> usize {
-        self.positions.len()
-    }
-    pub fn finish(mut self) -> Option<Caret> {
-        if self.positions.is_empty() {
-            return None;
-        }
-        self.positions.sort_by(|a, b| a.cmp(b));
-        self.positions.dedup();
-        // Reverse it so that popping gets the leftmost position first
-        self.positions.reverse();
-        Some(Caret {
-            start: self.start,
-            end: self.end,
-            r_positions: self.positions,
-        })
-    }
-}
-
-#[derive(Debug, Clone, derive_more::IntoIterator)]
-pub struct Caret {
-    /// Start of underbar
-    start: usize,
-    /// End of underbar
-    end: usize,
-    /// Relative to start
-    /// Reversed, so that popping gets the leftmost position first
-    #[into_iterator]
-    r_positions: Vec<usize>,
-}
-impl Caret {
-    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &usize> {
-        self.r_positions.iter()
-    }
-    pub fn push(&mut self, pos: usize) -> bool {
-        if pos > self.end.saturating_sub(self.start) {
-            false
-        } else {
-            self.r_positions.push(pos);
-            self.r_positions.sort_by(|a, b| a.cmp(b));
-            self.r_positions.dedup();
-            self.r_positions.reverse();
-            true
-        }
-    }
-    pub fn pop(&mut self) -> Option<usize> {
-        self.r_positions.pop()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.r_positions.is_empty()
-    }
-    pub fn len(&self) -> usize {
-        self.r_positions.len()
-    }
-    pub fn format(mut self) -> Option<FormattedCaretSegment> {
-        let mut lines: Vec<CaretLine> = vec![];
-
-        if self.is_empty() {
-            return None;
-        }
-
-        let mut underbar = TokenStream::new();
-        let mut underbar_sep = TokenStream::new();
-
-        underbar.push(Token::Space(self.start()));
-
-        let mut last_index = 0;
-
-        for pos in self.iter().rev() {
-            let sep = pos.saturating_sub(last_index);
-            underbar.push_str(REP(sep, H_CARET));
-            underbar.push_str(H_DOWN);
-            last_index = pos + 1;
-        }
-        if last_index < self.end().saturating_sub(self.start()) {
-            underbar.push_str(
-                H_CARET.repeat(
-                    self.end()
-                        .saturating_sub(self.start())
-                        .saturating_sub(last_index),
-                ),
-            );
-        }
-
-        underbar_sep.push(Token::Space(self.start()));
-
-        let mut last_index = 0;
-
-        for pos in self.iter().rev() {
-            let sep = pos.saturating_sub(last_index);
-            underbar_sep.push(Token::Space(sep));
-            underbar_sep.push_str(V_CARET);
-            last_index = pos + 1;
-        }
-        if last_index < self.end().saturating_sub(self.start()) {
-            underbar_sep.push(Token::Space(
-                self.end()
-                    .saturating_sub(self.start())
-                    .saturating_sub(last_index),
-            ));
-        }
-
-        // Generate each caret line
-        // each line "arrows" the first position to the end
-        // followed by a "sepeartor" line containing all V_CARETs at the given positions
-        while !self.is_empty() {
-            // First generate the main line
-            let mut line = TokenStream::new();
-            line.push(Token::Space(self.start()));
-
-            let mut current_pos = 0;
-
-            for (i, pos) in self.iter().rev().enumerate() {
-                // Insert spaces until we reach the next position, if its the first position, else we draw H_CARET
-                if i == 0 {
-                    line.push(Token::Space(pos.saturating_sub(current_pos)));
-                } else {
-                    line.push_str(REP(pos.saturating_sub(current_pos), H_CARET));
-                }
-
-                current_pos = *pos + 1;
-                if i == 0 {
-                    // Transition from H_CARET to UP_RIGHT
-                    line.push_str(UP_RIGHT);
-                    line.push_str(H_CARET);
-                } else {
-                    line.push_str(H_CARET);
-                }
-            }
-            // pop the position, so we dont print it again in the separator line
-            let _ = self.r_positions_mut().pop().unwrap();
-            if !self.is_empty() {
-                // Generate the separator line
-                let mut sep: TokenStream = TokenStream::new();
-                sep.push(Token::Space(self.start()));
-                current_pos = 0;
-                for pos in self.iter().rev() {
-                    // Insert spaces until we reach the next position
-                    sep.push_str((SPACE(pos.saturating_sub(current_pos))).as_str());
-                    current_pos = *pos + 1;
-                    sep.push_str(V_CARET);
-                }
-                lines.push((line, Some(sep)).into());
-            } else {
-                lines.push((line, None).into());
-            }
-        }
-
-        Some(FormattedCaretSegment::new(underbar, underbar_sep, lines))
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct UnderbarLine {
@@ -276,9 +94,6 @@ impl From<(Option<TokenStream>, TokenStream)> for CaretLine {
     }
 }
 impl CaretLine {
-    pub fn main(&self) -> &TokenStream {
-        &self.main
-    }
     pub fn main_with<I: Into<TokenStream>>(&self, msg: I) -> LineTokenStream {
         let mut line = LineTokenStream::new();
         line.push_new(&self.main);
@@ -287,5 +102,410 @@ impl CaretLine {
     }
     pub fn separator(&self) -> Option<&TokenStream> {
         self.sep.as_ref()
+    }
+}
+
+#[derive(Debug, Clone, derive_more::IntoIterator)]
+pub struct ReportCaret {
+    /// Start of underbar
+    start: usize,
+    /// End of underbar
+    end: usize,
+    /// Relative to start
+    /// Reversed, so that popping gets the leftmost position first
+    #[into_iterator]
+    r_positions: Vec<ReportLabel>,
+}
+impl PartialEq for ReportCaret {
+    fn eq(&self, other: &Self) -> bool {
+        self.start == other.start && self.end == other.end
+    }
+}
+impl Eq for ReportCaret {}
+impl PartialOrd for ReportCaret {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.start.cmp(&other.start).then(self.end.cmp(&other.end)))
+    }
+}
+impl Ord for ReportCaret {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.start
+            .cmp(&other.start)
+            .then(self.end.cmp(&other.end))
+            .then(self.r_positions.len().cmp(&other.r_positions.len()))
+            .then_with(|| {
+                self.r_positions
+                    .iter()
+                    .rev()
+                    .zip(other.r_positions.iter().rev())
+                    .find_map(|(a, b)| {
+                        let ord = a.cmp(b);
+                        if ord == std::cmp::Ordering::Equal {
+                            None
+                        } else {
+                            Some(ord)
+                        }
+                    })
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(self) enum Line {
+    Sep(TokenStream),
+    Underbar(TokenStream),
+    LabelWithCaret(TokenStream),
+}
+impl Line {
+    pub fn into_inner(self) -> TokenStream {
+        match self {
+            Line::Sep(sep) => sep,
+            Line::Underbar(underbar) => underbar,
+            Line::LabelWithCaret(main) => main,
+        }
+    }
+}
+impl Display for Line {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Line::Sep(sep) => write!(f, "{}{}", sep, f.alternate().then(|| "\n").unwrap_or("")),
+            Line::Underbar(underbar) => {
+                write!(
+                    f,
+                    "{}{}",
+                    underbar,
+                    f.alternate().then(|| "\n").unwrap_or("")
+                )
+            }
+            Line::LabelWithCaret(main) => {
+                write!(f, "{}{}", main, f.alternate().then(|| "\n").unwrap_or(""))
+            }
+        }
+    }
+}
+
+impl ReportCaret {
+    pub(super) fn new(start: usize, end: usize, mut r_positions: Vec<ReportLabel>) -> Self {
+        r_positions.sort_by(|a, b| a.cmp(b));
+        r_positions.dedup();
+        r_positions.reverse();
+        Self {
+            start,
+            end,
+            r_positions,
+        }
+    }
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &ReportLabel> {
+        self.r_positions.iter()
+    }
+    pub fn push<I: Into<ReportLabel>>(&mut self, label: I) -> bool {
+        let label: ReportLabel = label.into();
+        if label.position() > self.end.saturating_sub(self.start) {
+            false
+        } else {
+            self.r_positions.push(label.into());
+            self.r_positions.sort_by(|a, b| a.cmp(b));
+            self.r_positions.dedup();
+            self.r_positions.reverse();
+            true
+        }
+    }
+    pub fn pop(&mut self) -> Option<ReportLabel> {
+        self.r_positions.pop()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.r_positions.is_empty()
+    }
+    pub fn len(&self) -> usize {
+        self.r_positions.len()
+    }
+    pub(self) fn format(mut self) -> Option<Vec<Line>> {
+        let mut lines: Vec<Line> = vec![];
+
+        if self.is_empty() {
+            return None;
+        }
+
+        let mut underbar = TokenStream::new();
+        let mut underbar_sep = TokenStream::new();
+
+        underbar.push(Token::Space(self.start));
+
+        let mut last_index = 0;
+
+        for label in self.iter().rev() {
+            let pos = label.position();
+            let sep = pos.saturating_sub(last_index);
+            underbar.push_str(REP(sep, H_CARET));
+            underbar.push_str(H_DOWN);
+            last_index = pos + 1;
+        }
+        if last_index < self.end.saturating_sub(self.start) {
+            underbar.push_str(
+                H_CARET.repeat(
+                    self.end
+                        .saturating_sub(self.start)
+                        .saturating_sub(last_index),
+                ),
+            );
+        }
+
+        lines.push(Line::Underbar(underbar));
+
+        underbar_sep.push(Token::Space(self.start));
+
+        let mut last_index = 0;
+
+        for label in self.iter().rev() {
+            let pos = label.position();
+            let sep = pos.saturating_sub(last_index);
+            underbar_sep.push(Token::Space(sep));
+            underbar_sep.push_str(V_CARET);
+            last_index = pos + 1;
+        }
+        if last_index < self.end.saturating_sub(self.start) {
+            underbar_sep.push(Token::Space(
+                self.end
+                    .saturating_sub(self.start)
+                    .saturating_sub(last_index),
+            ));
+        }
+
+        lines.push(Line::Sep(underbar_sep));
+
+        // Generate each caret line
+        // each line "arrows" the first position to the end
+        // followed by a "sepeartor" line containing all V_CARETs at the given positions
+        while !self.is_empty() {
+            // First generate the main line
+            let mut label_line = TokenStream::new();
+            label_line.push(Token::Space(self.start));
+
+            let mut current_pos = 0;
+
+            let label_len = self.r_positions.len();
+
+            for (i, label) in self.iter().rev().enumerate() {
+                let pos = label.position();
+                // Insert spaces until we reach the next position, if its the first position, else we draw H_CARET
+                if i == 0 {
+                    label_line.push(Token::Space(pos.saturating_sub(current_pos)));
+                } else {
+                    label_line.push_str(REP(pos.saturating_sub(current_pos), H_CARET));
+                }
+
+                current_pos = pos + 1;
+                if i == 0 {
+                    // Transition from H_CARET to UP_RIGHT
+                    label_line.push([Token::UpRight, Token::HCaret(1)]);
+                } else {
+                    label_line.push(Token::HCaret(1));
+                }
+            }
+            // pop the position, so we dont print it again in the separator line
+            let last = self.r_positions.pop().unwrap();
+
+            // Write the label
+            let ReportLabel {
+                message,
+                child_labels,
+                position: parent_label_position,
+                length: partent_label_length,
+            } = last;
+            if child_labels.is_empty() {
+                // We can print a short arrow
+                label_line.push([Token::LArrow, Token::Space(1)]);
+                label_line.extend(message);
+                lines.push(Line::LabelWithCaret(label_line));
+            } else {
+                label_line.push([
+                    Token::HCaret(1),
+                    Token::HDown,
+                    Token::HCaret(2),
+                    Token::LArrow,
+                    Token::Space(1),
+                ]);
+                label_line.extend(message);
+                lines.push(Line::LabelWithCaret(label_line));
+                // Now we wanna print the child labels
+                // The returned separator line reaches until the last caret of the last label
+                // so we need to further extend it to the current parent label + 2 (for the arrow-transition)
+                let mut child_sep = self
+                    .get_separator_line()
+                    .unwrap_or(Line::Sep(TokenStream::new()))
+                    .into_inner();
+
+                // Add spaces until we reach the caret of the parent label + 2 (for the arrow-transition)
+                let current_pos = (child_sep).lit_len();
+                if current_pos == 0 {
+                    let target_pos = parent_label_position
+                        // 2 for the arrow-transition
+                        .saturating_add(3)
+                        .saturating_add(self.start);
+                    dbg!(current_pos, target_pos, child_sep.lit_len());
+                    if target_pos > current_pos {
+                        child_sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
+                    }
+                } else {
+                    let target_pos = current_pos
+                        // 2 for the arrow-transition
+                        .saturating_add(2);
+                    dbg!(current_pos, target_pos, child_sep.lit_len());
+                    if target_pos > current_pos {
+                        child_sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
+                    }
+                }
+                dbg!(child_sep.lit_len());
+                eprintln!("Child sep: -{}-", child_sep);
+                // We wanna clone it here, as this is the separator for all child labels
+                let mut child_sep_with_caret = child_sep.clone();
+                child_sep_with_caret.push(Token::VCaret);
+                lines.push(Line::Sep(child_sep_with_caret.clone()));
+                let child_labels_len = child_labels.len();
+                for (i, child) in child_labels.into_iter().enumerate() {
+                    // We can "unsafely" sub here, as the for loop ensures that child_labels_len > 0
+                    let is_last_child_label = i == child_labels_len - 1;
+                    // Each child label is prepended by the same "child_sep" as that resembles the carets of the other labels
+                    let mut child_line = child_sep.clone();
+                    if is_last_child_label {
+                        child_line.push([
+                            Token::UpRight,
+                            Token::HCaret(3),
+                            Token::LArrow,
+                            Token::Space(1),
+                        ]);
+                    } else {
+                        child_line.push([
+                            Token::VRight,
+                            Token::HCaret(3),
+                            Token::LArrow,
+                            Token::Space(1),
+                        ]);
+                    }
+                    child_line.extend(child);
+                    // Add the child line
+                    lines.push(Line::LabelWithCaret(child_line));
+                    if !is_last_child_label {
+                        // We wanna clone it here, as this is the separator for all child labels
+                        lines.push(Line::Sep(child_sep_with_caret.clone()));
+                    }
+                }
+            }
+            // If there are more labels, we wanna add a separator line
+            if let Some(sep) = self.get_separator_line() {
+                lines.push(sep);
+            }
+        }
+
+        Some(lines)
+    }
+    fn get_separator_line(&self) -> Option<Line> {
+        if self.is_empty() {
+            return None;
+        }
+        let mut sep: TokenStream = TokenStream::new();
+        sep.push(Token::Space(self.start));
+        let mut current_pos = 0;
+        for label in self.iter().rev() {
+            let pos = label.position();
+            // Insert spaces until we reach the next position
+            sep.push(Token::Space(pos.saturating_sub(current_pos)));
+            current_pos = pos + 1;
+            sep.push(Token::VCaret);
+        }
+        Some(Line::Sep(sep))
+    }
+}
+impl Display for ReportCaret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(formatted) = self.clone().format() {
+            formatted
+                .into_iter()
+                .try_for_each(|cl| write!(f, "{:#}", cl))
+        } else {
+            std::fmt::Result::Err(std::fmt::Error)
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ReportLabel {
+    pub position: usize,
+    pub length: usize,
+    pub message: TokenStream,
+    pub child_labels: Vec<TokenStream>,
+}
+
+impl PartialEq for ReportLabel {
+    fn eq(&self, other: &Self) -> bool {
+        self.position == other.position
+    }
+}
+impl Eq for ReportLabel {}
+impl PartialOrd for ReportLabel {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.position.cmp(&other.position))
+    }
+}
+impl Ord for ReportLabel {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.position.cmp(&other.position)
+    }
+}
+impl ReportLabel {
+    pub fn new<I: Into<TokenStream>, C: Into<TokenStream>, V: IntoIterator<Item = C>>(
+        position: usize,
+        length: usize,
+        message: I,
+        child_labels: V,
+    ) -> Self {
+        Self {
+            position,
+            length,
+            message: message.into(),
+            child_labels: child_labels.into_iter().map(Into::into).collect(),
+        }
+    }
+    pub fn from_iter<I: Into<TokenStream>, C: Into<TokenStream>, V: IntoIterator<Item = C>>(
+        position: usize,
+        length: usize,
+        message: I,
+        child_labels: V,
+    ) -> Self {
+        Self {
+            position,
+            length,
+            message: message.into(),
+            child_labels: child_labels.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl<I: Into<TokenStream>, C: Into<TokenStream>, V: IntoIterator<Item = C>>
+    From<(usize, usize, I, V)> for ReportLabel
+{
+    fn from(value: (usize, usize, I, V)) -> Self {
+        Self::new(value.0, value.1, value.2, value.3)
+    }
+}
+
+#[derive(Debug, Clone, derive_more::IntoIterator, derive_more::From, derive_more::Into)]
+pub struct ReportLabels {
+    labels: Vec<ReportCaret>,
+}
+impl FromIterator<ReportCaret> for ReportLabels {
+    fn from_iter<T: IntoIterator<Item = ReportCaret>>(iter: T) -> Self {
+        let mut labels: Vec<ReportCaret> = iter.into_iter().collect();
+        labels.sort();
+        Self { labels }
+    }
+}
+
+impl Display for ReportLabels {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.labels
+            .iter()
+            .try_for_each(|cl| writeln!(f, "{:#}", cl))
     }
 }

@@ -20,6 +20,10 @@ impl TokenStream {
         Self { tokens: vec![] }
     }
 
+    pub fn lit_len(&self) -> usize {
+        self.tokens.iter().map(|tkn| tkn.len()).sum()
+    }
+
     pub fn on_color(&mut self, color: Color) {
         if let Some(first) = self.tokens.first_mut() {
             *first = Token::Styled(color, Some(Box::new(first.clone())));
@@ -27,17 +31,29 @@ impl TokenStream {
         }
     }
 
-    pub fn push<I: Into<Token>>(&mut self, item: I) {
-        if let Some(last) = self.tokens.last_mut() {
-            // Try to merge with the last token
-            if let Some(merged) = last.merge(item.into()) {
-                // Push the non-mergeable token
-                self.tokens.push(merged);
-            }
-            // Merged. As "merge" takes a mutable reference, we dont need to do anything
-        } else {
-            // No last token, just push
-            self.tokens.push(item.into());
+    pub fn push<T: Into<Token>, I: IntoIterator<Item = T>>(&mut self, item: I) {
+        // Try to merge the iterator via fold
+        let result = item
+            .into_iter()
+            // Use the last token as the initial accumulator
+            .fold(self.tokens.pop(), |acc: Option<Token>, item| {
+                let item: Token = item.into();
+                if let Some(mut acc) = acc {
+                    if let Some(unmerged) = acc.merge(item) {
+                        // Not able to merge
+                        self.tokens.push(acc);
+                        Some(unmerged)
+                    } else {
+                        // Merged. As "merge" takes a mutable reference, return the merged accumulator
+                        Some(acc)
+                    }
+                } else {
+                    // No accumulator yet, so just return the item as the new accumulator
+                    Some(item)
+                }
+            });
+        if let Some(tkn) = result {
+            self.tokens.push(tkn);
         }
     }
 
@@ -85,13 +101,20 @@ impl TokenStream {
         // Try to merge the first item with the last token
         let mut iter = iter.into_iter();
         if let Some(mut outer) = iter.next() {
+            let mut outer_needs_push = true;
             for inner in iter {
                 if let Some(merged) = outer.merge(inner) {
                     // Push the non-mergeable token
                     self.push(outer);
                     outer = merged;
+                    outer_needs_push = true;
+                } else {
+                    outer_needs_push = false;
                 }
                 // Merged. As "merge" takes a mutable reference, we dont need to do anything
+            }
+            if outer_needs_push {
+                self.push(outer);
             }
         }
     }

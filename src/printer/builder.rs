@@ -76,6 +76,19 @@ impl From<ChildLabel> for TokenizedChildLabel {
         Self { message: stream }
     }
 }
+impl TokenizedChildLabel {
+    pub fn to_token_stream(&self) -> TokenStream {
+        self.message.clone()
+    }
+    pub fn into_token_stream(self) -> TokenStream {
+        self.message
+    }
+}
+impl Into<TokenStream> for TokenizedChildLabel {
+    fn into(self) -> TokenStream {
+        self.into_token_stream()
+    }
+}
 
 impl ArgumentErrorReport {
     pub(crate) fn trim_input<'a, A: AsRef<str>>(
