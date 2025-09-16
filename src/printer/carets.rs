@@ -289,22 +289,3 @@ impl CaretLine {
         self.sep.as_ref()
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct CaretsBuilder {
-    segments: Vec<Caret>,
-}
-impl CaretsBuilder {
-    pub fn new() -> Self {
-        Self { segments: vec![] }
-    }
-    pub fn push(&mut self, seg: CaretBuilder) {
-        if let Some(seg) = seg.finish() {
-            self.segments.push(seg);
-        }
-    }
-    pub fn finish(mut self) -> Vec<Caret> {
-        self.segments.sort_by(|a, b| a.start.cmp(&b.start));
-        self.segments
-    }
-}

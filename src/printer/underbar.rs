@@ -43,11 +43,11 @@ impl ArgumentErrorReport {
 
         let mut colors = colors();
 
-        let mut label_lines: Vec<(
+        // (underbar_start, underbar_range, caret_positionals (relative to start, label_message, child_labels))
+        let mut labels: Vec<(
             usize,
             RangeInclusive,
-            &TokenStream,
-            Vec<TokenizedChildLabel>,
+            Vec<(usize, TokenStream, Vec<TokenizedChildLabel>)>,
         )> = Vec::with_capacity(self.labels.len());
 
         // Calculate the down caret (┬) positions and underbar ranges
@@ -61,7 +61,7 @@ impl ArgumentErrorReport {
             let start = range.start().saturating_sub(offset);
             let end = range.end().saturating_sub(offset);
 
-            let underbar_range = (start..=end).into();
+            let underbar_range: RangeInclusive = (start..=end).into();
             let underbar_len = end.saturating_sub(start + 1).max(1);
 
             // The underbar tree split (┬) usually starts at the 3rd character to the right of the start
@@ -79,58 +79,85 @@ impl ArgumentErrorReport {
             let mut child_lines: Vec<TokenizedChildLabel> =
                 Vec::from_iter(child_labels.iter().cloned());
 
-            // (underbar_start, underbar_range, message, child_lines)
+            let underbar_range_len = underbar_range.end().saturating_sub(underbar_range.start());
+
             let label_line: (
                 usize,
                 RangeInclusive,
-                &TokenStream,
-                Vec<TokenizedChildLabel>,
+                Vec<(usize, TokenStream, Vec<TokenizedChildLabel>)>,
             ) = (
                 if offset != 0 { start + 4 } else { start },
                 underbar_range,
-                message,
-                child_lines,
+                // Generate the underbar line positionals
+                // It is important that this is generated first, as multiple labels can overlap and we cannot change after printing
+                if underbar_range_len > 5 {
+                    vec![(2, message.clone(), child_lines)]
+                } else if underbar_range_len > 3 {
+                    vec![(
+                        (underbar_range_len / 2).saturating_sub(1),
+                        message.clone(),
+                        child_lines,
+                    )]
+                } else {
+                    vec![(0, message.clone(), child_lines)]
+                },
             );
 
-            label_lines.push(label_line);
+            labels.push(label_line);
         }
 
-        // Generate the underbar line
-        // It is important that this is generated first, as multiple labels can overlap and we cannot change after printing
-        let mut underbar_ranges: Vec<(usize, RangeInclusive, Vec<usize>)> = label_lines
-            .iter()
-            .map(|label_line| {
-                let LabelLine {
-                    underbar_start,
-                    underbar_range,
-                    ..
-                } = label_line;
+        for label in labels {}
+        /*
+               let mut labels: Vec<(
+                   usize,
+                   RangeInclusive,
+                   Vec<usize>,
+                   TokenStream,
+                   Vec<TokenizedChildLabel>,
+               )> = labels
+                   .into_iter()
+                   .map(|label| {
+                       let (underbar_start, underbar_range, label_message, child_labels) = label;
 
-                let range = underbar_range.end().saturating_sub(underbar_range.start());
+                       let range_len = underbar_range.end().saturating_sub(underbar_range.start());
 
-                if range > 5 {
-                    // We start the down caret (┬) 3 characters to the right of the start
-                    (*underbar_start, *underbar_range, vec![2])
-                } else if range > 3 {
-                    // We start the down caret (┬) in the middle of the underbar
-                    (
-                        *underbar_start,
-                        *underbar_range,
-                        vec![(range / 2).saturating_sub(1)],
-                    )
-                } else {
-                    // Just put it at the start
-                    (*underbar_start, *underbar_range, vec![0])
-                }
-            })
-            .collect::<Vec<_>>();
-
+                       if range_len > 5 {
+                           // We start the down caret (┬) 3 characters to the right of the start
+                           (
+                               underbar_start,
+                               underbar_range,
+                               vec![2],
+                               label_message,
+                               child_labels,
+                           )
+                       } else if range_len > 3 {
+                           // We start the down caret (┬) in the middle of the underbar
+                           (
+                               underbar_start,
+                               underbar_range,
+                               vec![(range_len / 2).saturating_sub(1)],
+                               label_message,
+                               child_labels,
+                           )
+                       } else {
+                           // Just put it at the start
+                           (
+                               underbar_start,
+                               underbar_range,
+                               vec![0],
+                               label_message,
+                               child_labels,
+                           )
+                       }
+                   })
+                   .collect::<Vec<_>>();
+        */
         // Check for overlapping ranges
-        let mut len = underbar_ranges.len();
+        let mut len = labels.len();
         'inner: for i in 0..len {
             for j in (i + 1)..len {
-                let (other_start, other_range, other_caret) = underbar_ranges[j].clone();
-                let (start, range, caret) = &mut underbar_ranges[i];
+                let (other_start, other_range, other_caret) = labels[j].clone();
+                let (start, range, caret) = &mut labels[i];
 
                 let range_start = *start;
                 let self_len = range.end().saturating_sub(range.start());
@@ -145,7 +172,11 @@ impl ArgumentErrorReport {
                     // Merge caret positions
                     // Adjusting the positions to be relative to the current range
                     let offset = other_range_start.saturating_sub(range_start);
-                    caret.extend(other_caret.iter().map(|pos| pos + offset));
+                    caret.extend(other_caret.into_iter().map(
+                        |(pos, label_message, child_labels)| {
+                            (pos + offset, label_message, child_labels)
+                        },
+                    ));
                 }
                 // If both overlap, we remove "other" and merge them into one, extending the current range to encompass both, and adding caret positions
                 else if (other_range_start < (range_start + self_len))
@@ -153,7 +184,11 @@ impl ArgumentErrorReport {
                 {
                     // Merge caret positions
                     let offset = other_range_start.saturating_sub(range_start);
-                    caret.extend(other_caret.iter().map(|pos| pos + offset));
+                    caret.extend(other_caret.into_iter().map(
+                        |(pos, label_message, child_labels)| {
+                            (pos + offset, label_message, child_labels)
+                        },
+                    ));
 
                     // Extend the current range to encompass both
                     let new_end = std::cmp::max(range.end(), other_range.end());
@@ -162,7 +197,8 @@ impl ArgumentErrorReport {
                     continue 'inner;
                 }
                 // Remove "other"
-                underbar_ranges.remove(j);
+                let removed = labels.remove(j);
+                dbg!(removed);
                 len -= 1;
             }
         }
