@@ -1,0 +1,33 @@
+[package]
+    edition = "2024"
+    name    = "token"
+    version = "0.1.0"
+
+[dependencies]
+    const_format = "0.2.34"
+    derive_more = { version = "2.0.1", features = [
+        "display",
+        "from",
+        "into",
+        "into_iterator",
+    ] }
+    itertools = "0.14.0"
+
+[dependencies.delegate]
+    git = "https://github.com/DasBossGit/rust-delegate.git"
+
+[dependencies.misc]
+    features = [
+        "bool",
+        "endianness",
+        "function_attributes",
+        "int",
+        "pathref",
+        "syntax_highlight",
+        "vec",
+    ]
+    git = "https://github.com/DasBossGit/misc.git"
+
+[lib]
+    path       = "src/lib.rs"
+    proc-macro = false

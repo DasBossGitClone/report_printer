@@ -1,0 +1,27 @@
+[package]
+    edition = "2024"
+    name    = "token_macro"
+    version = "0.1.0"
+
+[dependencies]
+    const_format = "0.2.34"
+    token        = { path = "../token" }
+    venial       = { version = "0.6.1" }
+    quote       = "1.0.40"
+    proc-macro2 = "1.0.101"
+
+[dependencies.misc]
+    features = [
+        "bool",
+        "endianness",
+        "function_attributes",
+        "int",
+        "pathref",
+        "syntax_highlight",
+        "vec",
+    ]
+    git = "https://github.com/DasBossGit/misc.git"
+
+[lib]
+    path       = "src/lib.rs"
+    proc-macro = true
