@@ -237,18 +237,16 @@ impl ReportCaret {
         for label in self.iter().rev() {
             let pos = label.position();
             let sep = pos.saturating_sub(last_index);
-            underbar.push_str(REP(sep, H_CARET));
-            underbar.push_str(H_DOWN);
+            underbar.push(Token::HCaret(sep));
+            underbar.push(Token::HDown);
             last_index = pos + 1;
         }
         if last_index < self.end.saturating_sub(self.start) {
-            underbar.push_str(
-                H_CARET.repeat(
-                    self.end
-                        .saturating_sub(self.start)
-                        .saturating_sub(last_index),
-                ),
-            );
+            underbar.push(Token::HCaret(
+                self.end
+                    .saturating_sub(self.start)
+                    .saturating_sub(last_index),
+            ));
         }
 
         lines.push(Line::Underbar(underbar));
@@ -261,7 +259,7 @@ impl ReportCaret {
             let pos = label.position();
             let sep = pos.saturating_sub(last_index);
             underbar_sep.push(Token::Space(sep));
-            underbar_sep.push_str(V_CARET);
+            underbar_sep.push(Token::VCaret);
             last_index = pos + 1;
         }
         if last_index < self.end.saturating_sub(self.start) {
@@ -284,15 +282,13 @@ impl ReportCaret {
 
             let mut current_pos = 0;
 
-            let label_len = self.r_positions.len();
-
             for (i, label) in self.iter().rev().enumerate() {
                 let pos = label.position();
                 // Insert spaces until we reach the next position, if its the first position, else we draw H_CARET
                 if i == 0 {
                     label_line.push(Token::Space(pos.saturating_sub(current_pos)));
                 } else {
-                    label_line.push_str(REP(pos.saturating_sub(current_pos), H_CARET));
+                    label_line.push(Token::HCaret(pos.saturating_sub(current_pos)));
                 }
 
                 current_pos = pos + 1;
@@ -311,7 +307,7 @@ impl ReportCaret {
                 message,
                 child_labels,
                 position: parent_label_position,
-                length: partent_label_length,
+                ..
             } = last;
             if child_labels.is_empty() {
                 // We can print a short arrow
@@ -343,7 +339,6 @@ impl ReportCaret {
                         // 2 for the arrow-transition
                         .saturating_add(3)
                         .saturating_add(self.start);
-                    dbg!(current_pos, target_pos, child_sep.lit_len());
                     if target_pos > current_pos {
                         child_sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
                     }
@@ -351,13 +346,10 @@ impl ReportCaret {
                     let target_pos = current_pos
                         // 2 for the arrow-transition
                         .saturating_add(2);
-                    dbg!(current_pos, target_pos, child_sep.lit_len());
                     if target_pos > current_pos {
                         child_sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
                     }
                 }
-                dbg!(child_sep.lit_len());
-                eprintln!("Child sep: -{}-", child_sep);
                 // We wanna clone it here, as this is the separator for all child labels
                 let mut child_sep_with_caret = child_sep.clone();
                 child_sep_with_caret.push(Token::VCaret);
@@ -502,10 +494,34 @@ impl FromIterator<ReportCaret> for ReportLabels {
     }
 }
 
-impl Display for ReportLabels {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.labels
-            .iter()
-            .try_for_each(|cl| writeln!(f, "{:#}", cl))
+impl ReportLabels {
+    pub fn new() -> Self {
+        Self { labels: vec![] }
+    }
+    pub fn push<I: Into<ReportCaret>>(&mut self, label: I) {
+        let label: ReportCaret = label.into();
+        if !self.labels.contains(&label) {
+            self.labels.push(label);
+            self.labels.sort();
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.labels.is_empty()
+    }
+    pub fn len(&self) -> usize {
+        self.labels.len()
+    }
+    pub fn write<T: std::io::Write, A: AsRef<[Token]>>(
+        &self,
+        mut writer: T,
+        ref_input: A,
+    ) -> std::io::Result<()> {
+        let ref_input: TokenBuffer = ref_input.as_ref().into();
+
+        for caret in self.labels.iter() {
+            writeln!(writer, "{:#}", ref_input)?;
+            writeln!(writer, "{:#}", caret)?;
+        }
+        Ok(())
     }
 }

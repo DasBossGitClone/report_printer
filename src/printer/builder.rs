@@ -48,7 +48,7 @@ pub struct TokenizedLabel {
 impl From<Label> for TokenizedLabel {
     fn from(value: Label) -> Self {
         let mut stream = TokenStream::from(value.message);
-        if let Some(color) = value.color {
+        if let Some(color) = value.style {
             stream.on_color(color);
         }
         Self {
@@ -70,7 +70,7 @@ pub struct TokenizedChildLabel {
 impl From<ChildLabel> for TokenizedChildLabel {
     fn from(value: ChildLabel) -> Self {
         let mut stream = TokenStream::from(value.message);
-        if let Some(color) = value.color {
+        if let Some(color) = value.style {
             stream.on_color(color);
         }
         Self { message: stream }

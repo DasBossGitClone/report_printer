@@ -24,9 +24,9 @@ impl TokenStream {
         self.tokens.iter().map(|tkn| tkn.len()).sum()
     }
 
-    pub fn on_color(&mut self, color: Color) {
+    pub fn on_color<I: Into<AnsiStyle>>(&mut self, style: I) {
         if let Some(first) = self.tokens.first_mut() {
-            *first = Token::Styled(color, Some(Box::new(first.clone())));
+            *first = Token::Styled(style.into(), Some(Box::new(first.clone())));
             self.push(Token::Reset);
         }
     }
@@ -162,5 +162,35 @@ impl<A: AsRef<str>> From<A> for TokenStream {
         let mut stream = TokenStream::new();
         stream.push_str(value.as_ref());
         stream
+    }
+}
+
+/// The borrowed variant of TokenStream
+pub struct TokenBuffer<'a> {
+    pub buffer: &'a [Token],
+}
+impl<'a> TokenBuffer<'a> {
+    pub fn new<A: AsRef<[Token]> + ?Sized>(buffer: &'a A) -> Self {
+        Self {
+            buffer: buffer.as_ref(),
+        }
+    }
+}
+impl<'a> Display for TokenBuffer<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for token in self.buffer {
+            write!(f, "{}", token)?;
+        }
+        Ok(())
+    }
+}
+impl AsRef<[Token]> for TokenBuffer<'_> {
+    fn as_ref(&self) -> &[Token] {
+        self.buffer
+    }
+}
+impl<'a, I: AsRef<[Token]> + ?Sized + 'a> From<&'a I> for TokenBuffer<'a> {
+    fn from(value: &'a I) -> Self {
+        Self::new(value)
     }
 }

@@ -1,5 +1,4 @@
 use super::*;
-use crate::printer::LabelLine;
 
 #[derive(Debug, Clone, derive_more::IntoIterator)]
 pub struct FormattedCaretSegment {
@@ -62,22 +61,6 @@ impl ArgumentErrorReport {
             let end = range.end().saturating_sub(offset);
 
             let underbar_range: RangeInclusive = (start..=end).into();
-            /* let underbar_len = end.saturating_sub(start + 1).max(1);
-
-            // The underbar tree split (┬) usually starts at the 3rd character to the right of the start
-            // Check if that is possible, otherwise just start in the middle
-            let down_start = if start + 3 < end {
-                2
-            } else {
-                (underbar_len / 2).saturating_sub(1)
-            }; */
-
-            /* let forward_label_indent = down_start + start;
-
-            let child_labels_len = child_labels.len(); */
-
-            /* let child_lines: Vec<TokenizedChildLabel> =
-            Vec::from_iter(child_labels.iter().cloned()); */
 
             let underbar_range_len = underbar_range.end().saturating_sub(underbar_range.start());
 
@@ -108,158 +91,69 @@ impl ArgumentErrorReport {
         }
 
         // Merge overlapping ranges and their caret positions
-        /*
-        Vec<(
-            usize [absolute start],
-            RangeInclusive [underbar range],
-            Vec<(
-                usize [relative caret / underbar position],
-                usize [length of the underbar],
-                TokenStream [label message],
-                Vec<TokenizedChildLabel> [child labels]
-            )>,
-        )>
-        */
-
         let mut new_labels: Vec<(
             usize,
             RangeInclusive,
             Vec<(usize, usize, TokenStream, Vec<TokenizedChildLabel>)>,
         )> = Vec::with_capacity(labels.len());
 
-        // Check for overlapping ranges
-        for self_i in 0..labels.len() {
-            for other in labels.iter().skip(self_i + 1).cloned() {
-                let (other_start, other_range, other_label) = other;
-                let (self_start, self_range, mut self_label) = labels[self_i].clone();
-                if self_start == other_start && self_range == other_range {
-                    // Exact same range, just merge caret positions
-                    self_label.extend(other_label);
-                    new_labels.push((self_start, self_range, self_label));
-                    continue;
-                }
-
-                let self_start = self_start;
-                let other_start = other_start;
-
-                let self_len = self_range.end().saturating_sub(self_range.start());
-                let other_len = other_range.end().saturating_sub(other_range.start());
-
-                // If "other" fits entirely within the current range, we remove "other" and merge it into the current range, adding its caret positions
-                if other_start >= self_start && (other_start + other_len) <= (self_start + self_len)
-                {
-                    // Merge caret positions
-                    // Adjusting the positions to be relative to the current range
-                    let offset = other_start.saturating_sub(self_start);
-                    self_label.extend(other_label.into_iter().map(
-                        |(pos, len, label_message, child_labels)| {
-                            (pos + offset, len, label_message, child_labels)
-                        },
-                    ));
-                    new_labels.push((self_start, self_range, self_label));
-                }
-                // If both overlap, we remove "other" and merge them into one, extending the current range to encompass both, and adding caret positions
-                else if (other_start < (self_start + self_len))
-                    && ((other_start + other_len) > self_start)
-                {
-                    // Merge caret positions
-                    let offset = other_start.saturating_sub(self_start);
-                    self_label.extend(other_label.into_iter().map(
-                        |(pos, len, label_message, child_labels)| {
-                            (pos + offset, len, label_message, child_labels)
-                        },
-                    ));
-
-                    // Extend the current range to encompass both
-                    let new_end = std::cmp::max(self_range.end(), other_range.end());
-                    let new_range = (self_range.start()..=new_end).into();
-                    new_labels.push((self_start, new_range, self_label));
-                } else {
-                    // No overlap, just add the current range as-is
-                    new_labels.push((self_start, self_range, self_label));
-                }
-            }
-        }
-        dbg!(&new_labels);
-        dbg!(&new_labels);
-
-        /*         'outer: loop {
-            let mut len = labels.len();
-            'inner: for self_i in 0..len {
-                let self_i = (len - self_i).saturating_sub(1);
-
-                for other_i in (0..self_i).rev() {
-                    if self_i == other_i {
-                        continue;
-                    }
-                    let (other_start, other_range, other_label) = labels[other_i].clone();
-                    let (self_start, self_range, self_label) = &mut labels[self_i];
-
-                    let self_range_start = *self_start;
-                    let self_len = self_range.end().saturating_sub(self_range.start());
-
-                    let other_range_start = other_start;
-                    let other_len = other_range.end().saturating_sub(other_range.start());
-
+        if let Some(rem) = labels.into_iter().fold(
+            None,
+            |mut current: Option<(
+                usize,
+                RangeInclusive,
+                Vec<(usize, usize, TokenStream, Vec<TokenizedChildLabel>)>,
+            )>,
+             other| {
+                if let Some((current_start, current_range, mut current_labels)) = current.take() {
+                    let (other_start, other_range, other_labels) = other;
                     // If "other" fits entirely within the current range, we remove "other" and merge it into the current range, adding its caret positions
-                    if other_range_start >= self_range_start
-                        && (other_range_start + other_len) <= (self_range_start + self_len)
-                    {
+                    if other_start >= current_start && (other_range.end() <= current_range.end()) {
                         // Merge caret positions
                         // Adjusting the positions to be relative to the current range
-                        let offset = other_range_start.saturating_sub(self_range_start);
-                        self_label.extend(other_label.into_iter().map(
+                        let offset = other_start.saturating_sub(current_start);
+                        current_labels.extend(other_labels.into_iter().map(
                             |(pos, len, label_message, child_labels)| {
                                 (pos + offset, len, label_message, child_labels)
                             },
                         ));
+                        Some((current_start, current_range, current_labels))
                     }
                     // If both overlap, we remove "other" and merge them into one, extending the current range to encompass both, and adding caret positions
-                    else if (other_range_start < (self_range_start + self_len))
-                        && ((other_range_start + other_len) > self_range_start)
+                    else if (other_start < (current_start + current_range.len()))
+                        && (other_range.end() > current_start)
                     {
                         // Merge caret positions
-                        let offset = other_range_start.saturating_sub(self_range_start);
-                        self_label.extend(other_label.into_iter().map(
+                        let offset = other_start.saturating_sub(current_start);
+                        current_labels.extend(other_labels.into_iter().map(
                             |(pos, len, label_message, child_labels)| {
                                 (pos + offset, len, label_message, child_labels)
                             },
                         ));
 
                         // Extend the current range to encompass both
-                        let new_end = std::cmp::max(self_range.end(), other_range.end());
-                        *self_range = (self_range.start()..=new_end).into();
+                        let new_end = std::cmp::max(current_range.end(), other_range.end());
+                        let new_range = (current_range.start()..=new_end).into();
+                        Some((current_start, new_range, current_labels))
                     } else {
-                        continue 'inner;
+                        // No overlap, just add the current range as-is and move to the next
+                        new_labels.push((current_start, current_range, current_labels));
+                        Some((other_start, other_range, other_labels))
                     }
-                    // Remove "other" as we have merged it
-                    // We can safely do this as we are skipping this due to the continue
-                    let removed = labels.remove(other_i);
-                    dbg!(removed);
-                    //len -= 1;
-                    // We need to continue here, as the vector has changed and it could lead to out-of-bounds panics
-                    continue 'outer;
+                } else {
+                    Some((other.0, other.1, other.2))
                 }
-                if self_i == 0 {
-                    break 'outer;
-                }
-            }
+            },
+        ) {
+            new_labels.push(rem);
         }
-        dbg!(&labels); */
 
         // Sort by starting position, then by range length (earliest start first then shortest range first)
-        let labels: Vec<(
-            usize,
-            RangeInclusive,
-            Vec<(usize, usize, TokenStream, Vec<TokenizedChildLabel>)>,
-        )> = new_labels
-            .into_iter()
-            .sorted_by(|a, b| {
-                a.0.cmp(&b.0)
-                    .then(a.1.start().cmp(&b.1.start()))
-                    .then(a.1.end().cmp(&b.1.end()))
-            })
-            .collect::<Vec<_>>();
+        new_labels.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then(a.1.start().cmp(&b.1.start()))
+                .then(a.1.end().cmp(&b.1.end()))
+        });
 
         // Now we wanna transform each label from "labels" into a ReportSegment
         // aka the mapping is pretty much
@@ -287,7 +181,7 @@ impl ArgumentErrorReport {
         )>
         */
 
-        Ok(labels
+        Ok(new_labels
             .into_iter()
             .map(|(start, range, positions)| {
                 let end = range.end();

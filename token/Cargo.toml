@@ -4,7 +4,6 @@
     version = "0.1.0"
 
 [dependencies]
-    const_format = "0.2.34"
     derive_more = { version = "2.0.1", features = [
         "display",
         "from",
@@ -18,13 +17,8 @@
 
 [dependencies.misc]
     features = [
-        "bool",
-        "endianness",
-        "function_attributes",
+
         "int",
-        "pathref",
-        "syntax_highlight",
-        "vec",
     ]
     git = "https://github.com/DasBossGit/misc.git"
 

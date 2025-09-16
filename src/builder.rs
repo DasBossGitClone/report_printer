@@ -1,5 +1,5 @@
 use ::std::fmt::Display;
-use ::token::Color;
+use ::token::AnsiStyle;
 
 use crate::ArgumentErrorReport;
 
@@ -165,7 +165,7 @@ pub struct Label {
     /// or if a message would repeat too much
     pub(super) child_labels: Vec<ChildLabel>,
     /// If no colors is set, it will be generated at runtime
-    pub(super) color: Option<Color>,
+    pub(super) style: Option<AnsiStyle>,
 }
 impl Label {
     pub fn new<I: Display, R: IntoRange>(range: R, message: I) -> Self {
@@ -173,7 +173,7 @@ impl Label {
             range: range.into_range(),
             message: message.to_string(),
             child_labels: Vec::new(),
-            color: None,
+            style: None,
         }
     }
 
@@ -182,8 +182,8 @@ impl Label {
         self
     }
 
-    pub fn with_color(mut self, color: Color) -> Self {
-        self.color = Some(color);
+    pub fn with_color<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
+        self.style = Some(style.into());
         self
     }
 
@@ -202,19 +202,19 @@ impl Label {
 pub struct ChildLabel {
     pub(super) message: String,
     /// If no colors is set, it will be generated at runtime
-    pub(super) color: Option<Color>,
+    pub(super) style: Option<AnsiStyle>,
 }
 
 impl ChildLabel {
     pub fn new<I: Display>(message: I) -> Self {
         Self {
             message: message.to_string(),
-            color: None,
+            style: None,
         }
     }
 
-    pub fn with_color(mut self, color: Color) -> Self {
-        self.color = Some(color);
+    pub fn with_color<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
+        self.style = Some(style.into());
         self
     }
 }

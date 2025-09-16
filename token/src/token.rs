@@ -24,7 +24,7 @@ pub enum Token {
     /// Plain text label
     Label(String),
     /// Represents a colored label with its associated line token stream, if None, the following tokens are colored
-    Styled(Color, Option<Box<Token>>),
+    Styled(AnsiStyle, Option<Box<Token>>),
     /// Reset color
     Reset,
 }
@@ -114,7 +114,7 @@ impl Token {
         let first_char = chars.next().unwrap();
         let token = match first_char {
             '\u{1b}' => {
-                // ANSI escape sequence for color
+                /* // ANSI escape sequence for color
                 let mut ansi_sequence = String::new();
                 ansi_sequence.push(first_char);
                 while let Some(c) = chars.next() {
@@ -145,7 +145,7 @@ impl Token {
                     let r = parts[0].parse::<u8>().unwrap_or(255);
                     let g = parts[1].parse::<u8>().unwrap_or(255);
                     let b = parts[2].parse::<u8>().unwrap_or(255);
-                    Color::new(r, g, b)
+                    RgbColor::new(r, g, b)
                 } else {
                     // We have a non-rgb ANSI color sequence
                     // so its just a single color code
@@ -155,7 +155,7 @@ impl Token {
                                 return None; // Invalid color code
                             }
                             if let Ok(code) = code.parse::<u8>() {
-                                if let Some(color) = Color::from_ansi_code(code) {
+                                if let Some(color) = RgbColor::from_ansi_code(code) {
                                     color
                                 } else {
                                     return None; // Invalid color code
@@ -169,13 +169,27 @@ impl Token {
                     } else {
                         return None; // Invalid color code
                     }
-                };
+                }; */
 
-                // Parse the next token after the ANSI sequence
-                if let Some((next_token, rem)) = Token::parse_from_str(chars.as_str()) {
-                    return Some((Token::Styled(color, Some(Box::new(next_token))), rem));
+                if let Ok((style, rem)) = AnsiStyle::try_from_str(s) {
+                    // We have a valid ANSI style
+                    if let Some(rem) = rem {
+                        // Now try to parse the remaining string as a token
+                        if let Some(parsed) = Token::parse_from_str(rem) {
+                            return Some((
+                                Token::Styled(style, Some(Box::new(parsed.0))),
+                                parsed.1,
+                            ));
+                        }
+                        // The remaining string is empty or invalid, so just return the styled token
+                        return Some((Token::Styled(style, None), None));
+                    }
+                    // No remaining string, so just return the styled token
+                    return Some((Token::Styled(style, None), None));
                 }
-                return Some((Token::Styled(color, None), None));
+                // Invalid ANSI sequence
+                // We'll just treat it as a normal label
+                return Some((Token::Label(s.to_string()), None));
             }
             '│' => Token::VCaret,
             '─' => Token::HCaret(chars.take_while_ref(|&c| c == '─').count() + 1),
@@ -213,8 +227,8 @@ impl Display for Token {
             Token::RArrow => write!(f, "{}", Self::R_ARROW),
             Token::Space(amount) => write!(f, "{}", Self::SPACE(*amount)),
             Token::Label(label) => write!(f, "{}", label),
-            Token::Styled(color, token) => {
-                write!(f, "{}", color.to_ansi_fg())?;
+            Token::Styled(style, token) => {
+                write!(f, "{}", style)?;
                 if let Some(token) = token {
                     write!(f, "{}", token)?;
                     write!(f, "{RESET}") // Reset color

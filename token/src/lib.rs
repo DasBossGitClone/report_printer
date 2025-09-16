@@ -1,5 +1,6 @@
 #![feature(iter_array_chunks)]
 #![allow(dead_code)]
+#![deny(unused)]
 
 use ::itertools::Itertools;
 use ::std::{fmt::Display, str::FromStr};
