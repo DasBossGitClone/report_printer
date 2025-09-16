@@ -1,5 +1,11 @@
 use super::*;
 
+/// The amount of white-space padding to add directly after the arrow and before the label message
+const ARROR_LABEL_PADDING: usize = 1;
+
+/// The offset from the parent label to the child labels
+const CHILD_LABEL_OFFSET: usize = 3;
+
 #[macro_export]
 macro_rules! impl_field {
     ($($struct_name:ident, $field_name:ident, $field_type:ty $(, $return_type:ty as $expr:expr)?);*$(;)?) => {
@@ -70,8 +76,8 @@ crate::impl_field!(
     UnderbarLine,underbar_sep,TokenStream;
     CaretLine,main,TokenStream;
     ReportLabel,position,usize;
-    ReportLabel,message,TokenStream;
-    ReportLabel,child_labels,Vec<TokenStream>;
+    ReportLabel,message,LineTokenStream;
+    ReportLabel,child_labels,Vec<LineTokenStream>;
 );
 
 #[derive(Debug, Clone)]
@@ -155,14 +161,19 @@ impl Ord for ReportCaret {
 pub(self) enum Line {
     Sep(TokenStream),
     Underbar(TokenStream),
-    LabelWithCaret(TokenStream),
+    // Label with the carets
+    Label(TokenStream),
+    // Mutliline Label with the carets
+    // The first line is Self::Label and the rest are
+    // Self::LabelSeq (Label Sequence)
+    LabelSeq(TokenStream),
 }
 impl Line {
     pub fn into_inner(self) -> TokenStream {
         match self {
             Line::Sep(sep) => sep,
             Line::Underbar(underbar) => underbar,
-            Line::LabelWithCaret(main) => main,
+            Line::LabelSeq(main) | Line::Label(main) => main,
         }
     }
 }
@@ -178,7 +189,7 @@ impl Display for Line {
                     f.alternate().then(|| "\n").unwrap_or("")
                 )
             }
-            Line::LabelWithCaret(main) => {
+            Line::LabelSeq(main) | Line::Label(main) => {
                 write!(f, "{}{}", main, f.alternate().then(|| "\n").unwrap_or(""))
             }
         }
@@ -311,28 +322,94 @@ impl ReportCaret {
             } = last;
             if child_labels.is_empty() {
                 // We can print a short arrow
-                label_line.push([Token::LArrow, Token::Space(1)]);
-                label_line.extend(message);
-                lines.push(Line::LabelWithCaret(label_line));
+                for line in message.into_iter() {
+                    let mut label_line = label_line.clone();
+                    label_line.push([
+                        if line.is_only() {
+                            Token::LArrow
+                        } else {
+                            Token::VCaret
+                        },
+                        Token::Space(ARROR_LABEL_PADDING),
+                    ]);
+                    label_line.extend(line);
+                    lines.push(Line::Label(label_line));
+                }
             } else {
-                label_line.push([
-                    Token::HCaret(1),
-                    Token::HDown,
-                    Token::HCaret(2),
-                    Token::LArrow,
-                    Token::Space(1),
-                ]);
-                label_line.extend(message);
-                lines.push(Line::LabelWithCaret(label_line));
+                if message.is_multi_line() {
+                    // We need a separator line, for the following lines, as it contains the carets
+                    let mut sep = self
+                        .get_separator_line()
+                        .unwrap_or(Line::Sep(TokenStream::new()))
+                        .into_inner();
+
+                    // Add spaces until we reach the caret of the parent label + 2 (for the arrow-transition)
+                    let current_pos = (sep).lit_len();
+                    if current_pos == 0 {
+                        let target_pos = parent_label_position
+                            // 2 for the arrow-transition
+                            .saturating_add(3)
+                            .saturating_add(self.start);
+                        if target_pos > current_pos {
+                            sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
+                        }
+                    } else {
+                        let target_pos = current_pos
+                            // 2 for the arrow-transition
+                            .saturating_add(2);
+                        if target_pos > current_pos {
+                            sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
+                        }
+                    }
+
+                    let mut message = message.into_iter();
+                    if let Some(line) = message.next() {
+                        label_line.push([
+                            Token::HCaret(1),
+                            Token::HDown,
+                            Token::HCaret(2),
+                            Token::VLeft,
+                            Token::Space(ARROR_LABEL_PADDING),
+                        ]);
+                        label_line.extend(line);
+                        lines.push(Line::Label(label_line));
+
+                        for line in message {
+                            let mut label_line = sep.clone();
+                            label_line.push([
+                                Token::VCaret,
+                                Token::Space(2),
+                                Token::VCaret,
+                                // offset by 1 to indicate that the line was split
+                                Token::Space(ARROR_LABEL_PADDING + 1),
+                            ]);
+                            label_line.extend(line);
+                            lines.push(Line::LabelSeq(label_line));
+                        }
+                    } else {
+                        panic!("Message is multi-line, but has no lines");
+                    }
+                } else {
+                    label_line.push([
+                        Token::HCaret(1),
+                        Token::HDown,
+                        Token::HCaret(2),
+                        Token::LArrow,
+                        Token::Space(ARROR_LABEL_PADDING),
+                    ]);
+                    label_line.extend(message.into_iter().next().unwrap());
+                    lines.push(Line::Label(label_line));
+                }
+
                 // Now we wanna print the child labels
                 // The returned separator line reaches until the last caret of the last label
-                // so we need to further extend it to the current parent label + 2 (for the arrow-transition)
+                // so we need to further extend it to the current parent label + CHILD_LABEL_PADDING (4) (for the arrow-transition)
                 let mut child_sep = self
                     .get_separator_line()
                     .unwrap_or(Line::Sep(TokenStream::new()))
                     .into_inner();
 
-                // Add spaces until we reach the caret of the parent label + 2 (for the arrow-transition)
+                // Add spaces until we reach the caret of the parent label + CHILD_LABEL_PADDING (4) (for the arrow-transition)
                 let current_pos = (child_sep).lit_len();
                 if current_pos == 0 {
                     let target_pos = parent_label_position
@@ -359,25 +436,86 @@ impl ReportCaret {
                     // We can "unsafely" sub here, as the for loop ensures that child_labels_len > 0
                     let is_last_child_label = i == child_labels_len - 1;
                     // Each child label is prepended by the same "child_sep" as that resembles the carets of the other labels
-                    let mut child_line = child_sep.clone();
-                    if is_last_child_label {
-                        child_line.push([
-                            Token::UpRight,
-                            Token::HCaret(3),
-                            Token::LArrow,
-                            Token::Space(1),
-                        ]);
-                    } else {
-                        child_line.push([
-                            Token::VRight,
-                            Token::HCaret(3),
-                            Token::LArrow,
-                            Token::Space(1),
-                        ]);
+                    for child_label_line in child.into_iter() {
+                        let mut child_line = child_sep.clone();
+                        // CHILD_LABEL_OFFSET + 2 as we need to offset the VCaret by 2, otherwise they would directly be next to the caret for the follwing labels
+                        match (
+                            child_label_line.is_first(),
+                            is_last_child_label,
+                            child_label_line.is_only(),
+                        ) {
+                            // Only line in the last child label
+                            (true, true, true) => {
+                                child_line.push([
+                                    Token::UpRight,
+                                    Token::HCaret(CHILD_LABEL_OFFSET + 2),
+                                    Token::LArrow,
+                                    Token::Space(ARROR_LABEL_PADDING),
+                                ]);
+                            }
+                            // Only line in label-child, but not the last child label
+                            (true, false, true) => {
+                                child_line.push([
+                                    Token::VRight,
+                                    Token::HCaret(CHILD_LABEL_OFFSET + 2),
+                                    Token::LArrow,
+                                    Token::Space(ARROR_LABEL_PADDING),
+                                ]);
+                            }
+                            // First line but not last in label-child, not last child label
+                            (true, true, false) => {
+                                child_line.push([
+                                    Token::UpRight,
+                                    Token::HCaret(CHILD_LABEL_OFFSET + 2),
+                                    Token::VLeft,
+                                    Token::Space(ARROR_LABEL_PADDING),
+                                ]);
+                            }
+                            // First line but not last in label-child, last child label
+                            (true, false, false) => {
+                                child_line.push([
+                                    Token::VRight,
+                                    Token::HCaret(CHILD_LABEL_OFFSET + 2),
+                                    Token::VLeft,
+                                    Token::Space(ARROR_LABEL_PADDING),
+                                ]);
+                            }
+                            // not last Child label, but not the only line
+                            (_, false, false) => {
+                                child_line.push([
+                                    Token::VCaret,
+                                    Token::Space(CHILD_LABEL_OFFSET + 2),
+                                    Token::VCaret,
+                                    // offset by 1 to indicate that the line was split
+                                    Token::Space(ARROR_LABEL_PADDING + 1),
+                                ]);
+                            }
+                            // Last Child label, but not the only line
+                            (_, true, false) => {
+                                child_line.push([
+                                    // We need to add an extra space here, as there are not more child labels, thus no carets which would offset the line
+                                    Token::Space(CHILD_LABEL_OFFSET + 3),
+                                    Token::VCaret,
+                                    // offset by 1 to indicate that the line was split
+                                    Token::Space(ARROR_LABEL_PADDING + 1),
+                                ]);
+                            }
+                            (_, _, true) => {
+                                child_line.push([Token::VCaret, Token::Space(5)]);
+                                eprintln!(
+                                    "{RED} This should never happen, how the fuck could this even be possible?! {RESET}"
+                                );
+                            }
+                        }
+
+                        if is_last_child_label {
+                        } else {
+                        }
+                        child_line.extend(child_label_line);
+                        // Add the child line
+                        lines.push(Line::Label(child_line));
                     }
-                    child_line.extend(child);
-                    // Add the child line
-                    lines.push(Line::LabelWithCaret(child_line));
+
                     if !is_last_child_label {
                         // We wanna clone it here, as this is the separator for all child labels
                         lines.push(Line::Sep(child_sep_with_caret.clone()));
@@ -425,8 +563,8 @@ impl Display for ReportCaret {
 pub struct ReportLabel {
     pub position: usize,
     pub length: usize,
-    pub message: TokenStream,
-    pub child_labels: Vec<TokenStream>,
+    pub message: LineTokenStream,
+    pub child_labels: Vec<LineTokenStream>,
 }
 
 impl PartialEq for ReportLabel {
@@ -446,7 +584,7 @@ impl Ord for ReportLabel {
     }
 }
 impl ReportLabel {
-    pub fn new<I: Into<TokenStream>, C: Into<TokenStream>, V: IntoIterator<Item = C>>(
+    pub fn new<I: Into<LineTokenStream>, C: Into<LineTokenStream>, V: IntoIterator<Item = C>>(
         position: usize,
         length: usize,
         message: I,
@@ -459,7 +597,11 @@ impl ReportLabel {
             child_labels: child_labels.into_iter().map(Into::into).collect(),
         }
     }
-    pub fn from_iter<I: Into<TokenStream>, C: Into<TokenStream>, V: IntoIterator<Item = C>>(
+    pub fn from_iter<
+        I: Into<LineTokenStream>,
+        C: Into<LineTokenStream>,
+        V: IntoIterator<Item = C>,
+    >(
         position: usize,
         length: usize,
         message: I,
@@ -474,7 +616,7 @@ impl ReportLabel {
     }
 }
 
-impl<I: Into<TokenStream>, C: Into<TokenStream>, V: IntoIterator<Item = C>>
+impl<I: Into<LineTokenStream>, C: Into<LineTokenStream>, V: IntoIterator<Item = C>>
     From<(usize, usize, I, V)> for ReportLabel
 {
     fn from(value: (usize, usize, I, V)) -> Self {

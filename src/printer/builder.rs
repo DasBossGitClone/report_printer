@@ -1,3 +1,5 @@
+use ::std::str::FromStr;
+
 use super::*;
 /// The final report that can be printed to the user
 /// Contained labels are printed each on their own
@@ -12,7 +14,7 @@ impl ArgumentErrorReport {
     pub fn new<'a, I: Into<String>>(
         input: I,
         offset: usize,
-        labels: impl Iterator<Item = &'a Label>,
+        labels: impl IntoIterator<Item = TokenizedLabel>,
     ) -> Self {
         let input = input.into();
         Self {
@@ -20,9 +22,7 @@ impl ArgumentErrorReport {
             input: TokenStream::from(&input),
             raw_input: input,
             labels: labels
-                .cloned()
-                .map(TokenizedLabel::from)
-                // Sort labels by their start range
+                .into_iter() // Sort labels by their start range
                 // with the earliest starting point first
                 .sorted_by(|a, b| {
                     a.range
@@ -32,61 +32,6 @@ impl ArgumentErrorReport {
                 })
                 .collect(),
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TokenizedLabel {
-    /// The range in the input string that this label annotates
-    pub(super) range: RangeInclusive,
-    pub(super) message: TokenStream,
-    /// Optional child labels for more detailed annotations
-    /// or if a message would repeat too much
-    pub(super) child_labels: Vec<TokenizedChildLabel>,
-}
-
-impl From<Label> for TokenizedLabel {
-    fn from(value: Label) -> Self {
-        let mut stream = TokenStream::from(value.message);
-        if let Some(color) = value.style {
-            stream.on_color(color);
-        }
-        Self {
-            range: value.range,
-            message: stream,
-            child_labels: value
-                .child_labels
-                .into_iter()
-                .map(TokenizedChildLabel::from)
-                .collect(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TokenizedChildLabel {
-    pub(super) message: TokenStream,
-}
-impl From<ChildLabel> for TokenizedChildLabel {
-    fn from(value: ChildLabel) -> Self {
-        let mut stream = TokenStream::from(value.message);
-        if let Some(color) = value.style {
-            stream.on_color(color);
-        }
-        Self { message: stream }
-    }
-}
-impl TokenizedChildLabel {
-    pub fn to_token_stream(&self) -> TokenStream {
-        self.message.clone()
-    }
-    pub fn into_token_stream(self) -> TokenStream {
-        self.message
-    }
-}
-impl Into<TokenStream> for TokenizedChildLabel {
-    fn into(self) -> TokenStream {
-        self.into_token_stream()
     }
 }
 
@@ -153,5 +98,132 @@ impl ArgumentErrorReport {
             format!("{pre}{}", &input[min_start_padded..])
         };
         (trimmed_input, min_start_padded)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TokenizedLabel {
+    /// The range in the input string that this label annotates
+    pub(super) range: RangeInclusive,
+    /// If no colors is set, it will be generated at runtime
+    pub(super) message: LineTokenStream,
+    /// Optional child labels for more detailed annotations
+    /// or if a message would repeat too much
+    pub(super) child_labels: Vec<TokenizedChildLabel>,
+}
+impl TokenizedLabel {
+    pub fn new<I: Display, R: IntoRange>(range: R, message: I) -> Self {
+        Self {
+            range: range.into_range(),
+            message: LineTokenStream::from_str(&message.to_string())
+                .expect("Failed to parse label message"),
+            child_labels: Vec::new(),
+        }
+    }
+    pub fn new_with<I: Display, R: IntoRange>(
+        range: R,
+        message: I,
+        child_labels: impl IntoIterator<Item = TokenizedChildLabel>,
+    ) -> Self {
+        Self {
+            range: range.into_range(),
+            message: LineTokenStream::from_str(&message.to_string())
+                .expect("Failed to parse label message"),
+            child_labels: child_labels.into_iter().collect(),
+        }
+    }
+    pub fn new_from<R: IntoRange, I: Into<LineTokenStream>>(
+        range: R,
+        message: I,
+        child_labels: impl IntoIterator<Item = TokenizedChildLabel>,
+    ) -> Self {
+        Self {
+            range: range.into_range(),
+            message: message.into(),
+            child_labels: child_labels.into_iter().collect(),
+        }
+    }
+
+    /// Replaces the current message
+    pub fn with_message<I: Display>(mut self, message: I) -> Self {
+        self.message =
+            LineTokenStream::from_str(&message.to_string()).expect("Failed to parse label message");
+        self
+    }
+
+    pub fn with_color<I: Into<AnsiStyle>>(self, style: I) -> Self {
+        self.with_color_all(style)
+    }
+    pub fn with_color_last<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
+        self.message.on_color_last(style);
+        self
+    }
+    pub fn with_color_all<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
+        self.message.on_color_all(style);
+        self
+    }
+
+    pub fn push<I: Into<TokenizedChildLabel>>(mut self, child_label: I) -> Self {
+        self.child_labels.push(child_label.into());
+        self
+    }
+    /* pub fn from_label(label: Label, max_label_width: usize, max_child_label_width: usize) -> Self {
+        let message: LineTokenStream =
+            LineTokenStream::from_str_with_length(&label.message, max_label_width);
+
+        let child_labels: Vec<TokenizedChildLabel> = label
+            .child_labels
+            .into_iter()
+            .map(|cl| {
+                let message =
+                    LineTokenStream::from_str_with_length(&cl.message, max_child_label_width);
+                TokenizedChildLabel { message }
+            })
+            .collect();
+
+        Self {
+            range: label.range,
+            message,
+            child_labels,
+        }
+    } */
+}
+
+#[derive(Debug, Clone, derive_more::Into)]
+pub struct TokenizedChildLabel {
+    /// If no colors is set, it will be generated at runtime
+    pub(super) message: LineTokenStream,
+}
+
+impl TokenizedChildLabel {
+    pub fn new<I: Display>(message: I) -> Self {
+        // We can safely unwrap here, as FromStr for LineTokenStream cannot fail
+        let stream = LineTokenStream::from_str(&message.to_string())
+            .expect("Failed to parse child label message");
+        Self { message: stream }
+    }
+    pub fn new_from<I: Into<LineTokenStream>>(message: I) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    pub fn with_color<I: Into<AnsiStyle>>(self, style: I) -> Self {
+        self.with_color_all(style)
+    }
+
+    pub fn with_color_all<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
+        self.message.on_color_all(style);
+        self
+    }
+    pub fn with_color_last<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
+        self.message.on_color_last(style);
+        self
+    }
+    pub fn to_token_stream<'a>(&'a self) -> &'a LineTokenStream {
+        &self.message
+    }
+    pub fn into_token_stream(self) -> LineTokenStream {
+        self.message
     }
 }

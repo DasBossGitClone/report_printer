@@ -1,7 +1,9 @@
 use ::std::fmt::Display;
-use ::token::AnsiStyle;
+use ::token::{AnsiStyle, LineTokenStream};
 
-use crate::ArgumentErrorReport;
+use crate::{ArgumentErrorReport, TokenizedChildLabel, TokenizedLabel};
+
+pub const CHILD_LABEL_PADDING: usize = 4;
 
 pub trait IntoRange {
     fn into_range(self) -> RangeInclusive;
@@ -129,6 +131,9 @@ pub struct ArgumentErrorReporter {
     input: String,
     /// The labels to annotate the input with
     labels: Vec<Label>,
+    max_label_length: usize,
+    /// If not set, it will be set to "max_label_length - CHILD_LABEL_PADDING" to offset the padding on the child labels
+    max_child_label_length: Option<usize>,
 }
 
 impl ArgumentErrorReporter {
@@ -137,7 +142,23 @@ impl ArgumentErrorReporter {
             trim_input: true,
             input: input.into(),
             labels: Vec::new(),
+            // Default max label length is 30 characters
+            max_label_length: 30,
+            max_child_label_length: None,
         }
+    }
+
+    pub fn max_label_length(&mut self, length: usize) -> &mut Self {
+        self.max_label_length = length;
+        if self.max_child_label_length.is_none() {
+            self.max_child_label_length = Some(length + CHILD_LABEL_PADDING);
+        }
+        self
+    }
+
+    pub fn max_child_label_length(&mut self, length: usize) -> &mut Self {
+        self.max_child_label_length = Some(length);
+        self
     }
 
     pub fn trim_input(&mut self, trim: bool) -> &mut Self {
@@ -160,12 +181,12 @@ impl ArgumentErrorReporter {
 pub struct Label {
     /// The range in the input string that this label annotates
     pub(super) range: RangeInclusive,
+    /// If no colors is set, it will be generated at runtime
     pub(super) message: String,
     /// Optional child labels for more detailed annotations
     /// or if a message would repeat too much
     pub(super) child_labels: Vec<ChildLabel>,
-    /// If no colors is set, it will be generated at runtime
-    pub(super) style: Option<AnsiStyle>,
+    pub(super) color: Option<AnsiStyle>,
 }
 impl Label {
     pub fn new<I: Display, R: IntoRange>(range: R, message: I) -> Self {
@@ -173,17 +194,18 @@ impl Label {
             range: range.into_range(),
             message: message.to_string(),
             child_labels: Vec::new(),
-            style: None,
+            color: None,
         }
     }
 
+    /// Replaces the current message
     pub fn with_message<I: Display>(mut self, message: I) -> Self {
         self.message = message.to_string();
         self
     }
 
     pub fn with_color<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
-        self.style = Some(style.into());
+        self.color = Some(style.into());
         self
     }
 
@@ -196,26 +218,62 @@ impl Label {
         self.child_labels.push(child_label.into());
         self
     }
+
+    pub(crate) fn get_message(&self) -> String {
+        if let Some(color) = self.color {
+            // Wrap the message in color codes
+            color.with_color(&self.message)
+        } else {
+            self.message.clone()
+        }
+    }
+    pub(crate) fn into_message(self) -> String {
+        if let Some(color) = self.color {
+            // Wrap the message in color codes
+            color.with_color(&self.message)
+        } else {
+            self.message
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ChildLabel {
-    pub(super) message: String,
     /// If no colors is set, it will be generated at runtime
-    pub(super) style: Option<AnsiStyle>,
+    pub(super) message: String,
+    pub(super) color: Option<AnsiStyle>,
 }
 
 impl ChildLabel {
     pub fn new<I: Display>(message: I) -> Self {
         Self {
             message: message.to_string(),
-            style: None,
+            color: None,
         }
     }
 
-    pub fn with_color<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
-        self.style = Some(style.into());
-        self
+    pub fn with_color<I: Into<AnsiStyle>>(self, style: I) -> Self {
+        Self {
+            color: Some(style.into()),
+            ..self
+        }
+    }
+
+    pub(crate) fn get_message(&self) -> String {
+        if let Some(color) = self.color {
+            // Wrap the message in color codes
+            color.with_color(&self.message)
+        } else {
+            self.message.clone()
+        }
+    }
+    pub(crate) fn into_message(self) -> String {
+        if let Some(color) = self.color {
+            // Wrap the message in color codes
+            color.with_color(&self.message)
+        } else {
+            self.message
+        }
     }
 }
 
@@ -235,6 +293,10 @@ pub enum BuilderError {
 }
 
 impl ArgumentErrorReporter {
+    /// Validates the current state of the builder and generates an ArgumentErrorReport
+    /// Returns a BuilderError if the state is invalid, but does not consume Self.
+    /// This allows one to fix the issues and try again without reinstantiating
+    /// the builder (so its a sorta "soft-fail").
     pub fn finish(&self) -> Result<ArgumentErrorReport, BuilderError> {
         // This verification allows us to carelessly use the ranges later on
         if self.labels.is_empty() {
@@ -276,10 +338,44 @@ impl ArgumentErrorReporter {
             self.input.clone()
         };
 
-        Ok(ArgumentErrorReport::new(
-            input,
-            input_label_offset,
-            self.labels.iter(),
-        ))
+        let labels = self
+            .labels
+            .iter()
+            .map(|label| {
+                let t_label = TokenizedLabel::new_from(
+                    label.range,
+                    {
+                        let mut stream = LineTokenStream::from_str_with_length(
+                            &label.message,
+                            self.max_label_length,
+                        );
+                        if let Some(color) = label.color {
+                            stream.on_color_all(color);
+                        }
+                        stream
+                    },
+                    label.child_labels.clone().into_iter().map(|cl| {
+                        TokenizedChildLabel::new_from({
+                            let mut stream = LineTokenStream::from_str_with_length(
+                                &cl.message,
+                                self.max_child_label_length
+                                    .unwrap_or(self.max_label_length - CHILD_LABEL_PADDING),
+                            );
+                            if let Some(color) = cl.color {
+                                stream.on_color_all(color);
+                            }
+                            stream
+                        })
+                    }),
+                );
+                if let Some(color) = label.color {
+                    t_label.with_color_all(color)
+                } else {
+                    t_label
+                }
+            })
+            .collect::<Vec<_>>();
+
+        Ok(ArgumentErrorReport::new(input, input_label_offset, labels))
     }
 }

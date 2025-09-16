@@ -12,8 +12,8 @@ pub use find_iter::*;
 
 fn main() {
     let mut report = ArgumentErrorReporter::new("This is a test input string");
-    let label = Label::new(5..=14, "This is a test label")
-        .with_child_label(ChildLabel::new("This is a child label"))
+    let label = Label::new(5..=14, "This is a test label\nwith more than one line")
+        .with_child_label(ChildLabel::new("This is a child label\nwith two lines"))
         .with_child_label(ChildLabel::new("This is another child label"));
     report.push(label);
     let label = Label::new(2..=4, "This is another label")
@@ -48,7 +48,7 @@ fn main() {
     println!("{}", String::from_utf8_lossy(&output));
 
     let mut report = ArgumentErrorReporter::new("Another test input, more text, even more text");
-    let label = Label::new(3..=14, "A label at the start")
+    let label = Label::new(3..=14, "A label at the start\nwith two lines")
         .with_child_label(ChildLabel::new("Child label A"))
         .with_child_label(ChildLabel::new("Child label B"));
     report.push(label);
@@ -59,7 +59,7 @@ fn main() {
     let label = Label::new(14..=26, "Another overlapping label")
         .with_child_label(ChildLabel::new("Child label 1"))
         .with_child_label(ChildLabel::new("Child label 2"))
-        .with_child_label(ChildLabel::new("Child label 3"));
+        .with_child_label(ChildLabel::new("Child label 3\nwith two lines"));
     report.push(label);
     let report = report.finish().unwrap();
     let mut output = Vec::new();

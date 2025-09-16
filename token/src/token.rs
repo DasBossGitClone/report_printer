@@ -105,6 +105,68 @@ impl Token {
         }
     }
 
+    /// Used to parse a label that may or may not be stylized
+    /// thus it either returns Self::Label or Self::Styled
+    pub fn parse_label_all(s: String) -> Vec<Token> {
+        let mut result = Vec::new();
+
+        let mut remaining = Some(s);
+
+        // Use the "parse_label" function in a loop to parse all labels
+        while let Some(rem) = remaining {
+            if let Some((token, rem)) = Self::parse_label(rem) {
+                result.push(token);
+                remaining = rem;
+            } else {
+                break;
+            }
+        }
+
+        result
+    }
+    /// Used to parse a label that may or may not be stylized
+    /// thus it either returns Self::Label or Self::Styled
+    pub fn parse_label(s: String) -> Option<(Self, Option<String>)> {
+        let haystack = s;
+        if haystack.is_empty() {
+            return None;
+        }
+
+        const NEELDE: &str = "\u{1b}[";
+        // Find all occurrences of the ANSI escape character
+
+        if let Some(escape_pos) = stringzilla::sz::find(&haystack, NEELDE) {
+            if escape_pos > 0 {
+                // There is a normal label before the escape sequence
+                // The NEEDLE is 2 characters long, so we need to subtract 1 (this is safe, as we checked escape_pos > 0)
+                // As we are only returning one token, we must return here, and return the remaining string
+                return Some((
+                    Token::Label(haystack[..escape_pos - 1].to_string()),
+                    Some(haystack[escape_pos..].to_string()),
+                ));
+            }
+            // Try to parse the escape sequence and the following label
+            // As the escape sequence is at the start, we can just parse the whole string
+            if let Ok((style, rem)) = AnsiStyle::try_from_str(&haystack[escape_pos..]) {
+                // We have a valid ANSI style
+                if let Some(rem) = rem {
+                    // Now try to parse the remaining string as a token
+                    if let Some(parsed) = Token::parse_from_str(rem) {
+                        return Some((Token::Styled(style, Some(Box::new(parsed.0))), parsed.1));
+                    }
+                    // The remaining string is empty or invalid, so just return the styled token
+                    return Some((Token::Styled(style, None), None));
+                }
+                // No remaining string, so just return the styled token
+                return Some((Token::Styled(style, None), None));
+            }
+            // Invalid ANSI sequence
+            // We'll just treat it as a normal label
+            return Some((Token::Label(haystack), None));
+        }
+        Some((Token::Label(haystack), None))
+    }
+
     pub(crate) fn parse_from_str<A: AsRef<str>>(s: A) -> Option<(Self, Option<String>)> {
         let s = s.as_ref();
         if s.is_empty() {
@@ -201,7 +263,7 @@ impl Token {
             ' ' => Token::Space(chars.take_while_ref(|&c| c == ' ').count() + 1),
             _ => {
                 let label = s.to_string();
-                return Some((Token::Label(label), None));
+                return Self::parse_label(label);
             }
         };
         let remaining = chars.collect::<String>();

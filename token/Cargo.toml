@@ -11,14 +11,16 @@
         "into_iterator",
     ] }
     itertools = "0.14.0"
+    stringzilla = "4.0.10"
 
 [dependencies.delegate]
     git = "https://github.com/DasBossGit/rust-delegate.git"
 
 [dependencies.misc]
     features = [
-
-        "int",
+        "bool",
+        "option",
+        "result",
     ]
     git = "https://github.com/DasBossGit/misc.git"
 

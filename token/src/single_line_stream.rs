@@ -149,11 +149,7 @@ impl FromStr for TokenStream {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut stream = TokenStream::new();
-        if stream.push_str(s) {
-            Ok(stream)
-        } else {
-            Err(())
-        }
+        stream.push_str(s).then_res(stream, ())
     }
 }
 

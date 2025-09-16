@@ -44,7 +44,7 @@ impl ArgumentErrorReport {
         let mut labels: Vec<(
             usize,
             RangeInclusive,
-            Vec<(usize, usize, TokenStream, Vec<TokenizedChildLabel>)>,
+            Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
         )> = Vec::with_capacity(self.labels.len());
 
         // Calculate the down caret (┬) positions and underbar ranges
@@ -67,7 +67,7 @@ impl ArgumentErrorReport {
             let label_line: (
                 usize,
                 RangeInclusive,
-                Vec<(usize, usize, TokenStream, Vec<TokenizedChildLabel>)>,
+                Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
             ) = (
                 start,
                 underbar_range,
@@ -94,7 +94,7 @@ impl ArgumentErrorReport {
         let mut new_labels: Vec<(
             usize,
             RangeInclusive,
-            Vec<(usize, usize, TokenStream, Vec<TokenizedChildLabel>)>,
+            Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
         )> = Vec::with_capacity(labels.len());
 
         if let Some(rem) = labels.into_iter().fold(
@@ -102,7 +102,7 @@ impl ArgumentErrorReport {
             |mut current: Option<(
                 usize,
                 RangeInclusive,
-                Vec<(usize, usize, TokenStream, Vec<TokenizedChildLabel>)>,
+                Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
             )>,
              other| {
                 if let Some((current_start, current_range, mut current_labels)) = current.take() {

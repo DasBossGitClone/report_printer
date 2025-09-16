@@ -11,10 +11,11 @@ pub use misc_extensions::consts::colors::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
 pub enum AnsiStyle {
-    RgbColor(RgbColor),
     Color(Color),
     Style(Style),
+    RgbColor(RgbColor),
 }
 impl AnsiStyle {
     pub const BLACK: Self = Self::Color(Color::BLACK);
@@ -92,7 +93,7 @@ impl AnsiStyle {
             let (code_str, rest) = input.split_at(pos);
             if let Ok(code) = code_str.parse::<u8>() {
                 if let Some(style) = AnsiStyle::from_ansi_code(code) {
-                    return Ok((style, Some(rest[code_str.len() + 1..].to_string()))); // +1 to skip the 'm'
+                    return Ok((style, Some(rest[1..].to_string()))); // +1 to skip the 'm'
                 }
             } else if let Some(pos) = code_str.find("38;2;") {
                 let rgb_part = &code_str[pos + 5..]; // Skip "38;2;"
@@ -112,6 +113,10 @@ impl AnsiStyle {
         } else {
             Err(())
         }
+    }
+
+    pub fn with_color<D: Display>(&self, s: D) -> String {
+        format!("{}{}{}", self.to_ansi_escape_sequence(), s, RESET)
     }
 }
 
