@@ -11,7 +11,7 @@ use ::token::AnsiStyle;
 pub use find_iter::*;
 
 fn main() {
-    let mut report = ArgumentErrorReporter::new("This is a test input string");
+    let mut report = ArgumentErrorReporter::new("This is a test input string").with_range();
     let label = Label::new(5..=14, "This is a test label\nwith more than one line")
         .with_child_label(ChildLabel::new("This is a child label\nwith two lines"))
         .with_child_label(ChildLabel::new("This is another child label"));

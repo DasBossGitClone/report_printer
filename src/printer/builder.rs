@@ -6,6 +6,7 @@ use super::*;
 #[derive(Debug)]
 pub struct ArgumentErrorReport {
     pub(super) input_label_offset: usize,
+    pub(crate) display_range: bool,
     pub(crate) raw_input: String,
     pub(super) input: TokenStream,
     pub(super) labels: Vec<TokenizedLabel>,
@@ -14,11 +15,13 @@ impl ArgumentErrorReport {
     pub fn new<'a, I: Into<String>>(
         input: I,
         offset: usize,
+        display_range: bool,
         labels: impl IntoIterator<Item = TokenizedLabel>,
     ) -> Self {
         let input = input.into();
         Self {
             input_label_offset: offset,
+            display_range,
             input: TokenStream::from(&input),
             raw_input: input,
             labels: labels

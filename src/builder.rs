@@ -61,7 +61,11 @@ pub struct RangeInclusive {
 }
 impl PartialOrd for RangeInclusive {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.start.cmp(&other.start).then(self.end.cmp(&other.end)))
+        Some(
+            self.start
+                .cmp(&(*other).start)
+                .then(self.end.cmp(&other.end)),
+        )
     }
 }
 impl Ord for RangeInclusive {
@@ -99,27 +103,26 @@ impl RangeInclusive {
     }
 }
 
-/// A simple wrapper to ensure the string is ASCII only
-pub struct AsciiString(pub String);
-impl Display for AsciiString {
+impl Display for RangeInclusive {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        if f.alternate() {
+            write!(f, "{} - {}", self.start, self.end)
+        } else {
+            if self.start == self.end {
+                write!(f, "{}", self.start)
+            } else {
+                write!(f, "{}..={}", self.start, self.end)
+            }
+        }
     }
 }
-impl AsciiString {
-    pub fn new<S: Into<String>>(s: S) -> Result<Self, Vec<usize>> {
-        let s: String = s.into();
-        if s.chars().all(|c| c.is_ascii()) {
-            Ok(Self(s))
-        } else {
-            // Return the indices of non-ascii characters
-            Err(s
-                .chars()
-                .map(|c| c.is_ascii())
-                .enumerate()
-                .filter_map(|(i, is_ascii)| if !is_ascii { Some(i) } else { None })
-                .collect::<Vec<usize>>())
-        }
+
+impl FromIterator<usize> for RangeInclusive {
+    fn from_iter<T: IntoIterator<Item = usize>>(iter: T) -> Self {
+        let mut iter = iter.into_iter();
+        let start = iter.next().unwrap_or(0);
+        let end = iter.next().unwrap_or(start);
+        Self { start, end }
     }
 }
 
@@ -131,6 +134,7 @@ pub struct ArgumentErrorReporter {
     input: String,
     /// The labels to annotate the input with
     labels: Vec<Label>,
+    display_range: bool,
     max_label_length: usize,
     /// If not set, it will be set to "max_label_length - CHILD_LABEL_PADDING" to offset the padding on the child labels
     max_child_label_length: Option<usize>,
@@ -140,11 +144,19 @@ impl ArgumentErrorReporter {
     pub fn new<I: Into<String>>(input: I) -> Self {
         Self {
             trim_input: true,
+            display_range: false,
             input: input.into(),
             labels: Vec::new(),
             // Default max label length is 30 characters
             max_label_length: 30,
             max_child_label_length: None,
+        }
+    }
+
+    pub fn with_range(self) -> Self {
+        Self {
+            display_range: true,
+            ..self
         }
     }
 
@@ -376,6 +388,11 @@ impl ArgumentErrorReporter {
             })
             .collect::<Vec<_>>();
 
-        Ok(ArgumentErrorReport::new(input, input_label_offset, labels))
+        Ok(ArgumentErrorReport::new(
+            input,
+            input_label_offset,
+            self.display_range,
+            labels,
+        ))
     }
 }

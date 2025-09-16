@@ -207,6 +207,9 @@ impl ReportCaret {
             r_positions,
         }
     }
+    pub fn range(&self) -> RangeInclusive {
+        (self.start..=self.end).into()
+    }
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &ReportLabel> {
         self.r_positions.iter()
     }
@@ -657,11 +660,20 @@ impl ReportLabels {
         &self,
         mut writer: T,
         ref_input: A,
+        display_range: bool,
     ) -> std::io::Result<()> {
         let ref_input: TokenBuffer = ref_input.as_ref().into();
 
         for caret in self.labels.iter() {
-            writeln!(writer, "{:#}", ref_input)?;
+            if caret.is_empty() {
+                continue;
+            }
+            if display_range {
+                let range = caret.range();
+                writeln!(writer, "{:#} [{range:#}]", ref_input)?;
+            } else {
+                writeln!(writer, "{:#}", ref_input)?;
+            }
             writeln!(writer, "{:#}", caret)?;
         }
         Ok(())

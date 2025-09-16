@@ -22,7 +22,7 @@ impl ArgumentErrorReport {
     fn write_internal<W: Write>(self, writer: &mut W) -> io::Result<()> {
         let caret_segments = self.generate_underbar()?;
 
-        caret_segments.write(writer, &self.input)?;
+        caret_segments.write(writer, &self.input, self.display_range)?;
 
         Ok(())
     }
