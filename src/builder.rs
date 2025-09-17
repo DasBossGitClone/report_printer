@@ -1,7 +1,7 @@
 use ::std::fmt::Display;
 use ::token::{AnsiStyle, LineTokenStream};
 
-use crate::{ArgumentErrorReport, TokenizedChildLabel, TokenizedLabel};
+use crate::{Report, TokenizedChildLabel, TokenizedLabel};
 
 pub const CHILD_LABEL_PADDING: usize = 4;
 
@@ -127,7 +127,7 @@ impl FromIterator<usize> for RangeInclusive {
 }
 
 #[derive(Debug, Clone)]
-pub struct ArgumentErrorReporter {
+pub struct ReportBuilder {
     /// Will only display the relevant part of the input if true
     trim_input: bool,
     /// The full input string thats referenced by the labels
@@ -140,7 +140,7 @@ pub struct ArgumentErrorReporter {
     max_child_label_length: Option<usize>,
 }
 
-impl ArgumentErrorReporter {
+impl ReportBuilder {
     pub fn new<I: Into<String>>(input: I) -> Self {
         Self {
             trim_input: true,
@@ -198,7 +198,7 @@ pub struct Label {
     /// Optional child labels for more detailed annotations
     /// or if a message would repeat too much
     pub(super) child_labels: Vec<ChildLabel>,
-    pub(super) color: Option<AnsiStyle>,
+    pub(super) color: Option<Vec<AnsiStyle>>,
 }
 impl Label {
     pub fn new<I: Display, R: IntoRange>(range: R, message: I) -> Self {
@@ -217,7 +217,7 @@ impl Label {
     }
 
     pub fn with_color<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
-        self.color = Some(style.into());
+        self.color.get_or_insert_with(Vec::new).push(style.into());
         self
     }
 
@@ -232,19 +232,22 @@ impl Label {
     }
 
     pub(crate) fn get_message(&self) -> String {
-        if let Some(color) = self.color {
+        let Self { message, color, .. } = self;
+        let message = message.clone();
+        if let Some(color) = color {
             // Wrap the message in color codes
-            color.with_color(&self.message)
+            color.into_iter().fold(message, |msg, c| c.with_color(&msg))
         } else {
-            self.message.clone()
+            message
         }
     }
     pub(crate) fn into_message(self) -> String {
-        if let Some(color) = self.color {
+        let Self { message, color, .. } = self;
+        if let Some(color) = color {
             // Wrap the message in color codes
-            color.with_color(&self.message)
+            color.into_iter().fold(message, |msg, c| c.with_color(&msg))
         } else {
-            self.message
+            message
         }
     }
 }
@@ -253,7 +256,7 @@ impl Label {
 pub struct ChildLabel {
     /// If no colors is set, it will be generated at runtime
     pub(super) message: String,
-    pub(super) color: Option<AnsiStyle>,
+    pub(super) color: Option<Vec<AnsiStyle>>,
 }
 
 impl ChildLabel {
@@ -264,33 +267,39 @@ impl ChildLabel {
         }
     }
 
-    pub fn with_color<I: Into<AnsiStyle>>(self, style: I) -> Self {
-        Self {
-            color: Some(style.into()),
-            ..self
-        }
+    pub fn with_color<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
+        self.color.get_or_insert_with(Vec::new).push(style.into());
+        self
+    }
+
+    pub fn reset_color(mut self) -> Self {
+        self.color = None;
+        self
     }
 
     pub(crate) fn get_message(&self) -> String {
-        if let Some(color) = self.color {
+        let Self { message, color } = self;
+        let message = message.clone();
+        if let Some(color) = color {
             // Wrap the message in color codes
-            color.with_color(&self.message)
+            color.into_iter().fold(message, |msg, c| c.with_color(&msg))
         } else {
-            self.message.clone()
+            message
         }
     }
     pub(crate) fn into_message(self) -> String {
-        if let Some(color) = self.color {
+        let Self { message, color } = self;
+        if let Some(color) = color {
             // Wrap the message in color codes
-            color.with_color(&self.message)
+            color.into_iter().fold(message, |msg, c| c.with_color(&msg))
         } else {
-            self.message
+            message
         }
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum BuilderError {
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum Error {
     #[error("No labels were added to the report")]
     NoLabels,
     #[error("A label has an empty message")]
@@ -300,38 +309,43 @@ pub enum BuilderError {
     #[error("The input string is empty")]
     EmptyInput,
     /// (given range, valid range)
-    #[error("A label has a range that is out of bounds: {0:?} not contained within {1:?}")]
-    OutOfBounds(RangeInclusive, RangeInclusive),
+    #[error(
+        "A label has a range that is out of bounds: {valid:?} not contained within {attempted_range:?}"
+    )]
+    OutOfBounds {
+        valid: RangeInclusive,
+        attempted_range: RangeInclusive,
+    },
 }
 
-impl ArgumentErrorReporter {
-    /// Validates the current state of the builder and generates an ArgumentErrorReport
+impl ReportBuilder {
+    /// Validates the current state of the builder and generates the Report.
     /// Returns a BuilderError if the state is invalid, but does not consume Self.
     /// This allows one to fix the issues and try again without reinstantiating
     /// the builder (so its a sorta "soft-fail").
-    pub fn finish(&self) -> Result<ArgumentErrorReport, BuilderError> {
+    pub fn finish(&self) -> Result<Report, Error> {
         // This verification allows us to carelessly use the ranges later on
         if self.labels.is_empty() {
-            return Err(BuilderError::NoLabels);
+            return Err(Error::NoLabels);
         }
         if self.input.is_empty() {
-            return Err(BuilderError::EmptyInput);
+            return Err(Error::EmptyInput);
         }
         let valid_range = 0..=self.input.len();
         self.labels.iter().try_for_each(|label| {
             if label.range.start() < *valid_range.start() || label.range.end() > *valid_range.end()
             {
-                return Err(BuilderError::OutOfBounds(
-                    label.range.clone(),
-                    valid_range.clone().into(),
-                ));
+                return Err(Error::OutOfBounds {
+                    attempted_range: label.range.clone(),
+                    valid: valid_range.clone().into(),
+                });
             }
             if label.message.is_empty() {
-                return Err(BuilderError::LabelEmptyMessage);
+                return Err(Error::LabelEmptyMessage);
             }
             label.child_labels.iter().try_for_each(|child_label| {
                 if child_label.message.is_empty() {
-                    return Err(BuilderError::LabelChildEmptyMessage);
+                    return Err(Error::LabelChildEmptyMessage);
                 }
                 Ok(())
             })?;
@@ -342,8 +356,7 @@ impl ArgumentErrorReporter {
         let mut input_label_offset = 0;
 
         let input = if self.trim_input {
-            let (trimmed_input, offset) =
-                ArgumentErrorReport::trim_input(&self.input, self.labels.iter());
+            let (trimmed_input, offset) = Report::trim_input(&self.input, self.labels.iter());
             input_label_offset = offset;
             trimmed_input
         } else {
@@ -354,15 +367,17 @@ impl ArgumentErrorReporter {
             .labels
             .iter()
             .map(|label| {
-                let t_label = TokenizedLabel::new_from(
+                TokenizedLabel::new_from(
                     label.range,
                     {
                         let mut stream = LineTokenStream::from_str_with_length(
                             &label.message,
                             self.max_label_length,
                         );
-                        if let Some(color) = label.color {
-                            stream.on_color_all(color);
+                        if let Some(color) = &label.color {
+                            color.into_iter().for_each(|c| {
+                                stream.on_color_all(*c);
+                            });
                         }
                         stream
                     },
@@ -374,21 +389,18 @@ impl ArgumentErrorReporter {
                                     .unwrap_or(self.max_label_length - CHILD_LABEL_PADDING),
                             );
                             if let Some(color) = cl.color {
-                                stream.on_color_all(color);
+                                color.into_iter().for_each(|c| {
+                                    stream.on_color_all(c);
+                                });
                             }
                             stream
                         })
                     }),
-                );
-                if let Some(color) = label.color {
-                    t_label.with_color_all(color)
-                } else {
-                    t_label
-                }
+                )
             })
             .collect::<Vec<_>>();
 
-        Ok(ArgumentErrorReport::new(
+        Ok(Report::new(
             input,
             input_label_offset,
             self.display_range,

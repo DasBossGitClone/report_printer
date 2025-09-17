@@ -111,6 +111,124 @@ impl CaretLine {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(self) struct Lines {
+    lines: Vec<Line>,
+}
+impl Lines {
+    pub fn to_inner<'a>(&'a self) -> impl Iterator<Item = TokenStream> {
+        self.lines.iter().map(|l| l.clone().into_inner())
+    }
+    pub fn into_inner(self) -> impl Iterator<Item = TokenStream> {
+        self.lines.into_iter().map(|l| l.into_inner())
+    }
+    pub fn len(&self) -> usize {
+        self.lines.len()
+    }
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &Line> {
+        self.lines.iter()
+    }
+    pub fn push<I: Into<Line>>(&mut self, line: I) -> &mut Self {
+        self.lines.push(line.into());
+        self
+    }
+    pub fn extend<I: Into<Line>>(&mut self, lines: impl IntoIterator<Item = I>) -> &mut Self {
+        self.lines.extend(lines.into_iter().map(Into::into));
+        self
+    }
+    pub fn extend_clone<I: AsRef<Line>>(
+        &mut self,
+        lines: impl IntoIterator<Item = I>,
+    ) -> &mut Self {
+        self.lines
+            .extend(lines.into_iter().map(|l| l.as_ref().clone()));
+        self
+    }
+    pub fn new() -> Self {
+        Self { lines: vec![] }
+    }
+}
+impl IntoIterator for Lines {
+    type Item = Line;
+    type IntoIter = std::vec::IntoIter<Line>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.lines.into_iter()
+    }
+}
+impl FromIterator<Line> for Lines {
+    fn from_iter<T: IntoIterator<Item = Line>>(iter: T) -> Self {
+        let lines: Vec<Line> = iter.into_iter().collect();
+        Self { lines }
+    }
+}
+
+impl Display for Lines {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let total = self.len();
+        if total == 0 {
+            return Ok(());
+        }
+        let mut iter = self.iter().rev();
+        let last = iter.next().expect("No lines");
+        if total == 1 {
+            write!(f, "{last}")
+        } else {
+            let mut until_last = iter.rev().take(total - 1);
+            until_last.try_for_each(|line| write!(f, "{line:#}"))?;
+            write!(f, "{last}")
+        }
+
+        /* self.iter().enumerate().try_for_each(|(i, line)| {
+            if i == total {
+                // Dont print a new line at the end
+                write!(f, "{line} - nnl")
+            } else {
+                // Pretty print, as "Line" implements alternate formatting which adds a new line
+                write!(f, "{line:#}")
+            }
+        }) */
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(self) enum Line {
+    Sep(TokenStream),
+    Underbar(TokenStream),
+    // Label with the carets
+    Label(TokenStream),
+    // Mutliline Label with the carets
+    // The first line is Self::Label and the rest are
+    // Self::LabelSeq (Label Sequence)
+    LabelSeq(TokenStream),
+}
+impl Line {
+    pub fn into_inner(self) -> TokenStream {
+        match self {
+            Line::Sep(sep) => sep,
+            Line::Underbar(underbar) => underbar,
+            Line::LabelSeq(main) | Line::Label(main) => main,
+        }
+    }
+}
+impl Display for Line {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Line::Sep(sep) => write!(f, "{}{}", sep, f.alternate().then(|| "\n").unwrap_or("")),
+            Line::Underbar(underbar) => {
+                write!(
+                    f,
+                    "{}{}",
+                    underbar,
+                    f.alternate().then(|| "\n").unwrap_or("")
+                )
+            }
+            Line::LabelSeq(main) | Line::Label(main) => {
+                write!(f, "{}{}", main, f.alternate().then(|| "\n").unwrap_or(""))
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, derive_more::IntoIterator)]
 pub struct ReportCaret {
     /// Start of underbar
@@ -157,45 +275,6 @@ impl Ord for ReportCaret {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(self) enum Line {
-    Sep(TokenStream),
-    Underbar(TokenStream),
-    // Label with the carets
-    Label(TokenStream),
-    // Mutliline Label with the carets
-    // The first line is Self::Label and the rest are
-    // Self::LabelSeq (Label Sequence)
-    LabelSeq(TokenStream),
-}
-impl Line {
-    pub fn into_inner(self) -> TokenStream {
-        match self {
-            Line::Sep(sep) => sep,
-            Line::Underbar(underbar) => underbar,
-            Line::LabelSeq(main) | Line::Label(main) => main,
-        }
-    }
-}
-impl Display for Line {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Line::Sep(sep) => write!(f, "{}{}", sep, f.alternate().then(|| "\n").unwrap_or("")),
-            Line::Underbar(underbar) => {
-                write!(
-                    f,
-                    "{}{}",
-                    underbar,
-                    f.alternate().then(|| "\n").unwrap_or("")
-                )
-            }
-            Line::LabelSeq(main) | Line::Label(main) => {
-                write!(f, "{}{}", main, f.alternate().then(|| "\n").unwrap_or(""))
-            }
-        }
-    }
-}
-
 impl ReportCaret {
     pub(super) fn new(start: usize, end: usize, mut r_positions: Vec<ReportLabel>) -> Self {
         r_positions.sort_by(|a, b| a.cmp(b));
@@ -234,8 +313,8 @@ impl ReportCaret {
     pub fn len(&self) -> usize {
         self.r_positions.len()
     }
-    pub(self) fn format(mut self) -> Option<Vec<Line>> {
-        let mut lines: Vec<Line> = vec![];
+    pub(self) fn format(mut self) -> Option<Lines> {
+        let mut lines = Lines::new();
 
         if self.is_empty() {
             return None;
@@ -553,9 +632,7 @@ impl ReportCaret {
 impl Display for ReportCaret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(formatted) = self.clone().format() {
-            formatted
-                .into_iter()
-                .try_for_each(|cl| write!(f, "{:#}", cl))
+            write!(f, "{formatted}")
         } else {
             std::fmt::Result::Err(std::fmt::Error)
         }
@@ -662,20 +739,123 @@ impl ReportLabels {
         ref_input: A,
         display_range: bool,
     ) -> std::io::Result<()> {
+        if self.is_empty() {
+            return Ok(());
+        }
+
         let ref_input: TokenBuffer = ref_input.as_ref().into();
 
-        for caret in self.labels.iter() {
-            if caret.is_empty() {
-                continue;
-            }
-            if display_range {
-                let range = caret.range();
-                writeln!(writer, "{:#} [{range:#}]", ref_input)?;
-            } else {
-                writeln!(writer, "{:#}", ref_input)?;
-            }
-            writeln!(writer, "{:#}", caret)?;
+        let len = self.len();
+
+        let mut iter: std::iter::Rev<std::slice::Iter<'_, ReportCaret>> = self.labels.iter().rev();
+
+        let last: &ReportCaret = iter.next().expect("No labels");
+
+        if len != 1 {
+            iter.rev().take(len - 1).try_for_each(|label| {
+                if display_range {
+                    let range = label.range();
+                    writeln!(writer, "{:#} [{range:#}]", ref_input)?;
+                } else {
+                    writeln!(writer, "{:#}", ref_input)?;
+                }
+                writeln!(writer, "{:#}", label)?;
+                // Just add a separator line between
+                writeln!(writer)
+            })?;
         }
-        Ok(())
+        if display_range {
+            let range = last.range();
+            writeln!(writer, "{:#} [{range:#}]", ref_input)?;
+        } else {
+            writeln!(writer, "{:#}", ref_input)?;
+        }
+        writeln!(writer, "{:#}", last)
+    }
+
+    pub fn into_writer<'a, W: Write, A: AsRef<[Token]>>(
+        &'a self,
+        writer: &'a mut W,
+        reference_input: &'a A,
+        display_range: bool,
+    ) -> ReportWriter<'a, W> {
+        ReportWriter::new(
+            writer,
+            reference_input.as_ref(),
+            &self.labels,
+            display_range,
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct ReportWriter<'a, W: Write> {
+    writer: &'a mut W,
+    reference_input: &'a [Token],
+    index: usize,
+    report_labels: &'a [ReportCaret],
+    display_range: bool,
+}
+impl<'a, W: Write> ReportWriter<'a, W> {
+    pub(crate) fn new(
+        writer: &'a mut W,
+        reference_input: &'a [Token],
+        report_labels: &'a [ReportCaret],
+        display_range: bool,
+    ) -> Self {
+        Self {
+            writer,
+            reference_input,
+            index: 0,
+            report_labels,
+            display_range,
+        }
+    }
+    pub fn write(mut self) -> std::io::Result<()> {
+        self.try_for_each(|res| res)
+    }
+}
+
+impl<W: Write> Iterator for ReportWriter<'_, W> {
+    type Item = std::io::Result<()>;
+    fn next(&mut self) -> Option<Self::Item> {
+        fn write<W: Write>(
+            writer: &mut W,
+            label: &ReportCaret,
+            reference_input: TokenBuffer,
+            display_range: bool,
+            is_last: bool,
+        ) -> std::io::Result<()> {
+            if display_range {
+                let range = label.range();
+                writeln!(writer, "{:#} [{range:#}]", reference_input)?;
+            } else {
+                writeln!(writer, "{:#}", reference_input)?;
+            }
+            writeln!(writer, "{:#}", label)?;
+            if is_last {
+                // Just add a separator line between
+                writeln!(writer)
+            } else {
+                Ok(())
+            }
+        }
+
+        let len = self.report_labels.len();
+        if self.index >= len {
+            return None;
+        }
+        let label: &ReportCaret = &self.report_labels[self.index];
+        self.index += 1;
+        let is_last = len == self.index + 1;
+        Some(write(
+            self.writer,
+            label,
+            token::TokenBuffer {
+                buffer: self.reference_input,
+            },
+            self.display_range,
+            is_last,
+        ))
     }
 }

@@ -4,14 +4,16 @@ use super::*;
 /// The final report that can be printed to the user
 /// Contained labels are printed each on their own
 #[derive(Debug)]
-pub struct ArgumentErrorReport {
-    pub(super) input_label_offset: usize,
-    pub(crate) display_range: bool,
+pub struct Report {
+    /* pub(super) input_label_offset: usize,
     pub(crate) raw_input: String,
-    pub(super) input: TokenStream,
     pub(super) labels: Vec<TokenizedLabel>,
+    */
+    pub(crate) display_range: bool,
+    pub(super) input: TokenStream,
+    pub(super) report_labels: ReportLabels,
 }
-impl ArgumentErrorReport {
+impl Report {
     pub fn new<'a, I: Into<String>>(
         input: I,
         offset: usize,
@@ -20,25 +22,25 @@ impl ArgumentErrorReport {
     ) -> Self {
         let input = input.into();
         Self {
-            input_label_offset: offset,
             display_range,
             input: TokenStream::from(&input),
-            raw_input: input,
-            labels: labels
-                .into_iter() // Sort labels by their start range
-                // with the earliest starting point first
-                .sorted_by(|a, b| {
-                    a.range
-                        .start()
-                        .cmp(&b.range.start())
-                        .then(b.range.end().cmp(&a.range.end()))
-                })
-                .collect(),
+            //raw_input: input,
+            /* labels: labels
+            .into_iter() // Sort labels by their start range
+            // with the earliest starting point first
+            .sorted_by(|a, b| {
+                a.range
+                    .start()
+                    .cmp(&b.range.start())
+                    .then(b.range.end().cmp(&a.range.end()))
+            })
+            .collect(), */
+            report_labels: Self::generate_underbar(offset, labels),
         }
     }
 }
 
-impl ArgumentErrorReport {
+impl Report {
     pub(crate) fn trim_input<'a, A: AsRef<str>>(
         input: A,
         labels: impl Iterator<Item = &'a Label>,

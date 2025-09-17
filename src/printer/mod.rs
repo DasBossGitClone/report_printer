@@ -3,7 +3,6 @@ use ::std::{
     io::{self, Write},
 };
 
-use ::itertools::Itertools;
 use ::token::*;
 
 use crate::{Find, FindRev, builder::*};
@@ -14,16 +13,14 @@ mod underbar;
 pub(super) use builder::*;
 pub(crate) use carets::*;
 
-impl ArgumentErrorReport {
+impl Report {
     pub fn write<W: Write>(self, writer: &mut W) -> io::Result<()> {
-        self.write_internal(writer)
+        self.report_labels
+            .write(writer, &self.input, self.display_range)
     }
 
-    fn write_internal<W: Write>(self, writer: &mut W) -> io::Result<()> {
-        let caret_segments = self.generate_underbar()?;
-
-        caret_segments.write(writer, &self.input, self.display_range)?;
-
-        Ok(())
+    pub fn into_writer<'a, W: Write>(&'a self, writer: &'a mut W) -> ReportWriter<'a, W> {
+        self.report_labels
+            .into_writer(writer, &self.input, self.display_range)
     }
 }

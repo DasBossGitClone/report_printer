@@ -36,59 +36,66 @@ impl FormattedCaretSegment {
     }
 }
 
-impl ArgumentErrorReport {
-    pub(super) fn generate_underbar(&self) -> std::io::Result<ReportLabels> {
-        let offset = self.input_label_offset;
+impl Report {
+    pub(super) fn generate_underbar(
+        input_label_offset: usize,
+        labels: impl IntoIterator<Item = TokenizedLabel>,
+    ) -> ReportLabels {
+        let offset = input_label_offset;
 
         // (underbar_start, underbar_range, caret_positionals (relative to start, label_message, child_labels))
-        let mut labels: Vec<(
+        /* let mut labels: Vec<(
             usize,
             RangeInclusive,
             Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
-        )> = Vec::with_capacity(self.labels.len());
+        )> = Vec::with_capacity(labels.len()); */
 
         // Calculate the down caret (┬) positions and underbar ranges
-        for label in self.labels.iter() {
-            let TokenizedLabel {
-                range,
-                message,
-                child_labels,
-            } = label;
+        let labels = labels
+            .into_iter()
+            .map(|label| {
+                let TokenizedLabel {
+                    range,
+                    message,
+                    child_labels,
+                } = label;
 
-            // If a offset is set, the input is prepended by 3x. and a space
-            let offset = offset.saturating_sub(4);
-            let start = range.start().saturating_sub(offset);
-            let end = range.end().saturating_sub(offset);
+                // If a offset is set, the input is prepended by 3x. and a space
+                let offset = offset.saturating_sub(4);
+                let start = range.start().saturating_sub(offset);
+                let end = range.end().saturating_sub(offset);
 
-            let underbar_range: RangeInclusive = (start..=end).into();
+                let underbar_range: RangeInclusive = (start..=end).into();
 
-            let underbar_range_len = underbar_range.end().saturating_sub(underbar_range.start());
+                let underbar_range_len =
+                    underbar_range.end().saturating_sub(underbar_range.start());
 
-            let label_line: (
-                usize,
-                RangeInclusive,
-                Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
-            ) = (
-                start,
-                underbar_range,
-                // Generate the underbar line positionals
-                // It is important that this is generated first, as multiple labels can overlap and we cannot change after printing
-                if underbar_range_len > 5 {
-                    vec![(2, underbar_range_len, message.clone(), child_labels.clone())]
-                } else if underbar_range_len > 3 {
-                    vec![(
-                        (underbar_range_len / 2).saturating_sub(1),
-                        underbar_range_len,
-                        message.clone(),
-                        child_labels.clone(),
-                    )]
-                } else {
-                    vec![(0, underbar_range_len, message.clone(), child_labels.clone())]
-                },
-            );
+                let label_line: (
+                    usize,
+                    RangeInclusive,
+                    Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
+                ) = (
+                    start,
+                    underbar_range,
+                    // Generate the underbar line positionals
+                    // It is important that this is generated first, as multiple labels can overlap and we cannot change after printing
+                    if underbar_range_len > 5 {
+                        vec![(2, underbar_range_len, message.clone(), child_labels.clone())]
+                    } else if underbar_range_len > 3 {
+                        vec![(
+                            (underbar_range_len / 2).saturating_sub(1),
+                            underbar_range_len,
+                            message.clone(),
+                            child_labels.clone(),
+                        )]
+                    } else {
+                        vec![(0, underbar_range_len, message.clone(), child_labels.clone())]
+                    },
+                );
 
-            labels.push(label_line);
-        }
+                label_line
+            })
+            .collect::<Vec<_>>();
 
         // Merge overlapping ranges and their caret positions
         let mut new_labels: Vec<(
@@ -181,7 +188,7 @@ impl ArgumentErrorReport {
         )>
         */
 
-        Ok(new_labels
+        new_labels
             .into_iter()
             .map(|(start, range, positions)| {
                 let end = range.end();
@@ -191,6 +198,6 @@ impl ArgumentErrorReport {
                     positions.into_iter().map(ReportLabel::from).collect(),
                 )
             })
-            .collect())
+            .collect()
     }
 }

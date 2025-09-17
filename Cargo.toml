@@ -1,7 +1,7 @@
 [package]
     edition = "2024"
     name    = "report_printer"
-    version = "0.1.0"
+    version = "1.0.0"
 
 [dependencies]
     derive_more = { version = "2.0.1", features = [
@@ -14,3 +14,11 @@
     paste = "1.0.15"
     thiserror = "2.0.16"
     token = { path = "./token" }
+
+[lib]
+    name = "report_printer"
+    path = "src/lib.rs"
+
+[[example]]
+    name = "report_printer"
+    path = "examples/report_printer.rs"
