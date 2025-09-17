@@ -4,7 +4,19 @@
     version = "1.1.0"
 
 [features]
+    debug = ["merge_overlap"]
+    # Enable the use of color in the arrows and carets
     caret_color = []
+    # Enable saturating arithmetic for all arithmetic operations
+    # This crate is tested extensively with this feature disabled
+    # but it is recommended to enable it in production builds
+    saturating_arithmetic = ["token/saturating_arithmetic"]
+    # Enable merging of overlapping labels
+    # Its not recommended to enable this feature,
+    # as having overlapping labels
+    # reduces readability tremendously
+    # and it is better to just avoid creating them in the first place
+    merge_overlap = []
 
 [dependencies]
     derive_more = { version = "2.0.1", features = [

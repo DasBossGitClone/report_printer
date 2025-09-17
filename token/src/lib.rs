@@ -1,4 +1,4 @@
-#![feature(iter_array_chunks)]
+#![feature(iter_array_chunks, trivial_bounds)]
 #![deny(dead_code, unused)]
 
 use ::itertools::Itertools;
@@ -16,6 +16,7 @@ mod single_line_stream;
 pub use single_line_stream::*;
 mod multiline_stream;
 pub use multiline_stream::*;
+pub mod saturating;
 
 #[macro_export(local_inner_macros)]
 macro_rules! impl_field {

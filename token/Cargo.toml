@@ -27,3 +27,6 @@
 [lib]
     path       = "src/lib.rs"
     proc-macro = false
+
+[features]
+    saturating_arithmetic = []
