@@ -6,68 +6,6 @@ const ARROR_LABEL_PADDING: usize = 1;
 /// The offset from the parent label to the child labels
 const CHILD_LABEL_OFFSET: usize = 3;
 
-#[macro_export]
-macro_rules! impl_field {
-    ($($struct_name:ident, $field_name:ident, $field_type:ty $(, $return_type:ty as $expr:expr)?);*$(;)?) => {
-        $(
-            $crate::impl_field!(@coerce $struct_name, $field_name, $field_type $(, $return_type as $expr)?);
-        )*
-    };
-    ($struct_name:ident, $field_name:ident, $field_type:ty $(, $return_type:ty as $expr:expr)?) => {
-        $crate::impl_field!(@coerce $struct_name, $field_name, $field_type $(, $return_type as $expr)?);
-    };
-    (@coerce $struct_name:ident, $field_name:ident, $field_type:ty, $return_type:ty as $expr:expr) => {
-        $crate::impl_field!(@expand $struct_name, $field_name, $field_type, $return_type, $expr);
-    };
-    (@coerce $struct_name:ident, $field_name:ident, $field_type:ty) => {
-        $crate::impl_field!(@expand $struct_name, $field_name, $field_type, $field_type);
-    };
-    (@expand $struct_name:ident, $field_name:ident, $field_type:ty, $return_type:ty $(, $expr:expr)?) => {
-        impl $struct_name {
-            paste::paste! {
-                pub fn [< $field_name >](&self) -> $return_type
-                where
-                    $field_type: Copy
-                {
-                    // If expr is Some, apply it
-                    $crate::impl_field!(@expand_expr self.$field_name $(=> $expr)?)
-                }
-                pub fn [< $field_name _cloned>](&self) -> $return_type
-                where
-                    $field_type: Clone
-                {
-                    // If expr is Some, apply it
-                    $crate::impl_field!(@expand_expr self.$field_name.clone() $(=> $expr)?)
-                }
-                pub fn [< $field_name _ref>]<'a>(&'a self) -> &'a $return_type {
-                    // If expr is Some, apply it
-                    $crate::impl_field!(@expand_expr &self.$field_name $(=> $expr)?)
-                }
-                pub fn [< $field_name _mut>]<'a>(&'a mut self) -> &'a mut $return_type {
-                    // If expr is Some, apply it
-                    $crate::impl_field!(@expand_expr &mut self.$field_name $(=> $expr)?)
-                }
-                $(
-                    pub fn [< $field_name _as >]<T>(&self) -> T
-                    where
-                        T: From<$field_type>,
-                    {
-                        // If expr is Some, apply it
-                        $crate::impl_field!(@expand_expr self.$field_name.clone().into() => $expr)
-                    }
-                )?
-            }
-        }
-    };
-    (@expand_expr $field:expr => $expr:expr) => {
-        $field.$expr
-    };
-    (@expand_expr $field:expr ) => {{
-        $field
-    }}
-
-}
-
 crate::impl_field!(
     ReportCaret,start,usize;
     ReportCaret,end,usize;
