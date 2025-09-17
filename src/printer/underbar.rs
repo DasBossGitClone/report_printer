@@ -20,12 +20,12 @@ impl Report {
                     range,
                     message,
                     child_labels,
-                    #[cfg(feature = "colored_carets")]
-                    colored_carets,
+                    #[cfg(feature = "caret_color")]
+                    caret_color: caret_color,
                 } = label;
 
-                #[cfg(feature = "colored_carets")]
-                let colored_carets = if let Some(color) = colored_carets {
+                /* #[cfg(feature = "caret_color")]
+                let caret_color = if let Some(color) = caret_color {
                     if let Some(color) = color {
                         Some(color)
                     } else {
@@ -34,7 +34,7 @@ impl Report {
                     }
                 } else {
                     None
-                };
+                }; */
 
                 // If a offset is set, the input is prepended by 3x. and a space
                 let offset = offset.saturating_sub(4);
@@ -66,8 +66,8 @@ impl Report {
                         underbar_range_len,
                         TokenizedLabel::new(
                             message,
-                            #[cfg(feature = "colored_carets")]
-                            colored_carets,
+                            #[cfg(feature = "caret_color")]
+                            caret_color,
                         ),
                         child_labels.clone(),
                     )],

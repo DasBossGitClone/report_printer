@@ -320,11 +320,11 @@ impl ReportCaret {
 
             let sep = pos.saturating_sub(last_index);
 
-            #[cfg(feature = "colored_carets")]
+            #[cfg(feature = "caret_color")]
             {
                 last_color = label.message.ref_color()
             };
-            #[cfg(not(feature = "colored_carets"))]
+            #[cfg(not(feature = "caret_color"))]
             {
                 last_color = None
             };
@@ -364,9 +364,9 @@ impl ReportCaret {
             let pos = label.position();
             let sep = pos.saturating_sub(last_index);
 
-            #[cfg(feature = "colored_carets")]
+            #[cfg(feature = "caret_color")]
             let label_caret_color = label.message.ref_color();
-            #[cfg(not(feature = "colored_carets"))]
+            #[cfg(not(feature = "caret_color"))]
             let label_caret_color: Option<&RgbColor> = None;
 
             underbar_sep.push(Token::Space(sep));
@@ -394,14 +394,14 @@ impl ReportCaret {
             let mut current_pos = 0;
 
             // We wanna use the color of the first label here, as this is also used for the Arrows
-            #[cfg(feature = "colored_carets")]
+            #[cfg(feature = "caret_color")]
             let label_color: Option<&RgbColor> = self
                 .iter()
                 .rev()
                 .next()
                 .expect("No labels")
                 .ref_label_color();
-            #[cfg(not(feature = "colored_carets"))]
+            #[cfg(not(feature = "caret_color"))]
             let label_color: Option<&RgbColor> = None;
 
             for (i, label) in self.iter().rev().enumerate() {
@@ -455,17 +455,17 @@ impl ReportCaret {
                     lines.push(Line::Label(label_line));
                 }
             } else {
-                #[cfg(feature = "colored_carets")]
+                #[cfg(feature = "caret_color")]
                 let label_caret_color: Option<RgbColor> = message.get_color();
                 // pcc = parent_colored_caret
                 // Shorthand to apply coloring if enabled
                 // Its just there to reduce boilerplate
                 let pcc = |token: Token| -> Token {
-                    #[cfg(feature = "colored_carets")]
+                    #[cfg(feature = "caret_color")]
                     {
                         token.try_with_coloring_feature(label_caret_color.as_ref())
                     }
-                    #[cfg(not(feature = "colored_carets"))]
+                    #[cfg(not(feature = "caret_color"))]
                     {
                         token
                     }
@@ -571,18 +571,18 @@ impl ReportCaret {
                     // We can "unsafely" sub here, as the for loop ensures that child_labels_len > 0
                     let is_last_child_label = i == child_labels_len - 1;
 
-                    #[cfg(feature = "colored_carets")]
+                    #[cfg(feature = "caret_color")]
                     let child_label_caret_color: Option<RgbColor> =
                         child.get_color().or(label_caret_color.clone());
                     // ccc = child_colored_caret
                     // Shorthand to apply coloring if enabled
                     // Its just there to reduce boilerplate
                     let ccc = |token: Token| -> Token {
-                        #[cfg(feature = "colored_carets")]
+                        #[cfg(feature = "caret_color")]
                         {
                             token.try_with_coloring_feature(child_label_caret_color.as_ref())
                         }
-                        #[cfg(not(feature = "colored_carets"))]
+                        #[cfg(not(feature = "caret_color"))]
                         {
                             token
                         }
@@ -618,7 +618,7 @@ impl ReportCaret {
                             // First line but not last in label-child, not last child label
                             (true, true, false) => {
                                 child_line.push([
-                                    ccc(Token::UpRight),
+                                    pcc(Token::UpRight),
                                     ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
                                     ccc(Token::VLeft),
                                     Token::Space(ARROR_LABEL_PADDING),
@@ -697,10 +697,10 @@ impl ReportCaret {
             // Insert spaces until we reach the next position
             sep.push(Token::Space(pos.saturating_sub(current_pos)));
             current_pos = pos + 1;
-            #[cfg(feature = "colored_carets")]
+            #[cfg(feature = "caret_color")]
             sep.push(Token::VCaret.try_with_coloring_feature(label.ref_label_color()));
 
-            #[cfg(not(feature = "colored_carets"))]
+            #[cfg(not(feature = "caret_color"))]
             sep.push(Token::VCaret);
         }
         Some(Line::Sep(sep))
@@ -771,7 +771,7 @@ impl ReportLabel {
             child_labels: child_labels.into_iter().map(Into::into).collect(),
         }
     }
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     pub(crate) fn ref_label_color(&self) -> Option<&RgbColor> {
         self.message.ref_color()
     }

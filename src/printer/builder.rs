@@ -1,8 +1,5 @@
 use ::std::str::FromStr;
 
-#[cfg(feature = "colored_carets")]
-use crate::printer::builder::colorization::TokenStreamColors;
-
 use super::*;
 /// The final report that can be printed to the user
 /// Contained labels are printed each on their own
@@ -104,11 +101,11 @@ pub struct TokenizedLabelFull {
     pub(super) range: RangeInclusive,
     /// If no colors is set, it will be generated at runtime
     pub(super) message: LineTokenStream,
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     /// If the outer Option is populated, colored carets are enabled
     /// If the inner Option is None, the colors of the label message are used
     /// If the inner Option is Some(color), that color is used for the carets
-    pub(super) colored_carets: Option<Option<RgbColor>>,
+    pub(super) caret_color: Option<RgbColor>,
     /// Optional child labels for more detailed annotations
     /// or if a message would repeat too much
     pub(super) child_labels: Vec<TokenizedChildLabel>,
@@ -117,13 +114,13 @@ impl TokenizedLabelFull {
     pub fn new<I: Display, R: IntoRange>(
         range: R,
         message: I,
-        #[cfg(feature = "colored_carets")] colored_carets: bool,
+        #[cfg(feature = "caret_color")] caret_color: Option<RgbColor>,
     ) -> Self {
         let stream =
             LineTokenStream::from_str(&message.to_string()).expect("Failed to parse label message");
         Self {
-            #[cfg(feature = "colored_carets")]
-            colored_carets: colored_carets.then(|| stream.get_color()),
+            #[cfg(feature = "caret_color")]
+            caret_color,
             range: range.into_range(),
             message: stream,
             child_labels: Vec::new(),
@@ -133,13 +130,13 @@ impl TokenizedLabelFull {
         range: R,
         message: I,
         child_labels: impl IntoIterator<Item = TokenizedChildLabel>,
-        #[cfg(feature = "colored_carets")] colored_carets: bool,
+        #[cfg(feature = "caret_color")] caret_color: Option<RgbColor>,
     ) -> Self {
         let message =
             LineTokenStream::from_str(&message.to_string()).expect("Failed to parse label message");
         Self {
-            #[cfg(feature = "colored_carets")]
-            colored_carets: colored_carets.then(|| message.get_color()),
+            #[cfg(feature = "caret_color")]
+            caret_color,
             range: range.into_range(),
             message,
             child_labels: child_labels.into_iter().collect(),
@@ -149,12 +146,12 @@ impl TokenizedLabelFull {
         range: R,
         message: I,
         child_labels: impl IntoIterator<Item = TokenizedChildLabel>,
-        #[cfg(feature = "colored_carets")] colored_carets: bool,
+        #[cfg(feature = "caret_color")] caret_color: Option<RgbColor>,
     ) -> Self {
         let message: LineTokenStream = message.into();
         Self {
-            #[cfg(feature = "colored_carets")]
-            colored_carets: colored_carets.then(|| message.get_color()),
+            #[cfg(feature = "caret_color")]
+            caret_color,
             range: range.into_range(),
             message,
             child_labels: child_labels.into_iter().collect(),
@@ -203,35 +200,35 @@ impl IntoIterator for TokenizedLabelFull {
 pub struct TokenizedChildLabel {
     /// If no colors is set, it will be generated at runtime
     pub(super) message: LineTokenStream,
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     /// If the outer Option is populated, colored carets are enabled
     /// If the inner Option is None, the colors of the label message are used
     /// If the inner Option is Some(color), that color is used for the carets
-    pub(super) colored_carets: Option<Option<RgbColor>>,
+    pub(super) caret_color: Option<RgbColor>,
 }
 
 impl TokenizedChildLabel {
     pub fn new<I: Display>(
         message: I,
-        #[cfg(feature = "colored_carets")] colored_carets: bool,
+        #[cfg(feature = "caret_color")] caret_color: Option<RgbColor>,
     ) -> Self {
         // We can safely unwrap here, as FromStr for LineTokenStream cannot fail
         let stream = LineTokenStream::from_str(&message.to_string())
             .expect("Failed to parse child label message");
         Self {
-            #[cfg(feature = "colored_carets")]
-            colored_carets: colored_carets.then(|| stream.get_color()),
+            #[cfg(feature = "caret_color")]
+            caret_color,
             message: stream,
         }
     }
     pub fn new_from<I: Into<LineTokenStream>>(
         message: I,
-        #[cfg(feature = "colored_carets")] colored_carets: bool,
+        #[cfg(feature = "caret_color")] caret_color: Option<RgbColor>,
     ) -> Self {
         let message: LineTokenStream = message.into();
         Self {
-            #[cfg(feature = "colored_carets")]
-            colored_carets: colored_carets.then(|| message.get_color()),
+            #[cfg(feature = "caret_color")]
+            caret_color,
             message,
         }
     }
@@ -255,18 +252,9 @@ impl TokenizedChildLabel {
         self.message
     }
 
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     pub(crate) fn get_color(&self) -> Option<RgbColor> {
-        if let Some(color) = self.colored_carets {
-            if let Some(color) = color {
-                Some(color)
-            } else {
-                // If the label itself has no color, but the message does, use that color
-                colorization::TokenStreamColors::get_color(&self.message)
-            }
-        } else {
-            None
-        }
+        self.caret_color.clone()
     }
 }
 
@@ -291,33 +279,33 @@ impl IntoIterator for TokenizedChildLabel {
 /// It does not contain the range nor child labels, as they are handled separately by the Report
 pub struct TokenizedLabel {
     pub(super) message: LineTokenStream,
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     /// The optional color used for the carets
     #[warn(dead_code)]
-    pub(super) colored_carets: Option<RgbColor>,
+    pub(super) caret_color: Option<RgbColor>,
 }
 impl TokenizedLabel {
-    pub fn new<I: Display, #[cfg(feature = "colored_carets")] C: Into<Option<RgbColor>>>(
+    pub fn new<I: Display, #[cfg(feature = "caret_color")] C: Into<Option<RgbColor>>>(
         message: I,
-        #[cfg(feature = "colored_carets")] colored_carets: C,
+        #[cfg(feature = "caret_color")] caret_color: C,
     ) -> Self {
         Self {
-            #[cfg(feature = "colored_carets")]
-            colored_carets: colored_carets.into(),
+            #[cfg(feature = "caret_color")]
+            caret_color: caret_color.into(),
             message: LineTokenStream::from_str(&message.to_string())
                 .expect("Failed to parse label message"),
         }
     }
     pub fn new_from<
         I: Into<LineTokenStream>,
-        #[cfg(feature = "colored_carets")] C: Into<Option<RgbColor>>,
+        #[cfg(feature = "caret_color")] C: Into<Option<RgbColor>>,
     >(
         message: I,
-        #[cfg(feature = "colored_carets")] colored_carets: C,
+        #[cfg(feature = "caret_color")] caret_color: C,
     ) -> Self {
         Self {
-            #[cfg(feature = "colored_carets")]
-            colored_carets: colored_carets.into(),
+            #[cfg(feature = "caret_color")]
+            caret_color: caret_color.into(),
             message: message.into(),
         }
     }
@@ -337,15 +325,15 @@ impl TokenizedLabel {
     pub fn is_multi_line(&self) -> bool {
         self.message.is_multi_line()
     }
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     #[warn(dead_code)]
     pub(crate) fn get_color(&self) -> Option<RgbColor> {
-        self.colored_carets.clone()
+        self.caret_color.clone()
     }
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     #[warn(dead_code)]
     pub(crate) fn ref_color(&self) -> Option<&RgbColor> {
-        self.colored_carets.as_ref()
+        self.caret_color.as_ref()
     }
 }
 impl Into<LineTokenStream> for TokenizedLabel {
@@ -362,75 +350,10 @@ impl IntoIterator for TokenizedLabel {
     }
 }
 
-#[cfg(feature = "colored_carets")]
-pub(crate) mod colorization {
-    use super::*;
-    #[allow(dead_code)]
-    pub trait TokenStreamColors {
-        /// Checks if anywhere in the stream, a Token is styled
-        fn has_styling(&self) -> bool;
-        fn has_coloring(&self) -> bool;
-        /// Returns the first color found in the stream, if any
-        fn get_color(&self) -> Option<RgbColor>;
-        /// Returns all colors found in the stream, if any
-        fn get_all_styles(&self) -> Vec<RgbColor>;
-    }
-
-    impl TokenStreamColors for LineTokenStream {
-        fn has_styling(&self) -> bool {
-            self.tokens
-                .iter()
-                .any(|stream| stream.iter().any(|tkn| matches!(tkn, Token::Styled(_, _))))
-        }
-        fn has_coloring(&self) -> bool {
-            self.tokens.iter().any(|stream| {
-                stream.iter().any(|tkn| {
-                    matches!(
-                        tkn,
-                        Token::Styled(AnsiStyle::Color(_) | AnsiStyle::RgbColor(_), _)
-                    )
-                })
-            })
-        }
-
-        fn get_color(&self) -> Option<RgbColor> {
-            for stream in &self.tokens {
-                for tkn in &stream.tokens {
-                    if let Token::Styled(style, _) = tkn {
-                        if let AnsiStyle::RgbColor(color) = style {
-                            return Some(*color);
-                        }
-                        if let AnsiStyle::Color(color) = style {
-                            return Some(RgbColor::from(*color));
-                        }
-                    }
-                }
-            }
-            None
-        }
-        fn get_all_styles(&self) -> Vec<RgbColor> {
-            let mut colors = vec![];
-            for stream in &self.tokens {
-                for tkn in &stream.tokens {
-                    if let Token::Styled(style, _) = tkn {
-                        if let AnsiStyle::RgbColor(color) = style {
-                            colors.push(*color);
-                        }
-                        if let AnsiStyle::Color(color) = style {
-                            colors.push(RgbColor::from(*color));
-                        }
-                    }
-                }
-            }
-            colors
-        }
-    }
-}
-
 pub trait TryWithStyling {
     #[allow(dead_code)]
     fn try_with_coloring<A: AsRef<RgbColor>>(self, style: Option<A>) -> Self;
-    /// Proxy method that only applies coloring if the "colored_carets" feature is enabled
+    /// Proxy method that only applies coloring if the "caret_color" feature is enabled
     fn try_with_coloring_feature<A: AsRef<RgbColor>>(self, style: Option<A>) -> Self;
 }
 
@@ -442,11 +365,11 @@ impl TryWithStyling for Token {
             self
         }
     }
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     fn try_with_coloring_feature<A: AsRef<RgbColor>>(self, style: Option<A>) -> Self {
         Self::try_with_coloring(self, style)
     }
-    #[cfg(not(feature = "colored_carets"))]
+    #[cfg(not(feature = "caret_color"))]
     fn try_with_coloring_feature<A: AsRef<RgbColor>>(self, _: Option<A>) -> Self {
         self
     }

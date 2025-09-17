@@ -423,6 +423,18 @@ impl AsRef<RgbColor> for RgbColor {
     }
 }
 
+impl TryFrom<AnsiStyle> for RgbColor {
+    type Error = ();
+
+    fn try_from(value: AnsiStyle) -> Result<Self, Self::Error> {
+        match value {
+            AnsiStyle::RgbColor(rgb) => Ok(rgb),
+            AnsiStyle::Color(color) => Ok(RgbColor::from(color)),
+            AnsiStyle::Style(_) => Err(()),
+        }
+    }
+}
+
 pub fn colors() -> impl Iterator<Item = RgbColor> {
     // VIP SECTION: Color generation
     // Just a placeholder for debugging purposes

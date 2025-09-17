@@ -125,9 +125,9 @@ fn empty_child_label_message() {
     assert_eq!(Error::LabelChildEmptyMessage, report.finish().unwrap_err());
 }
 
-#[cfg(feature = "colored_carets")]
+#[cfg(feature = "caret_color")]
 fn single_label_with_color_and_caret_color() {
-    let mut report = ReportBuilder::new("Another test input").colored_carets();
+    let mut report = ReportBuilder::new("Another test input").caret_color();
     let label = Label::new(0..13, "A label at the start")
         .with_color(AnsiStyle::GREEN)
         .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
@@ -138,10 +138,12 @@ fn single_label_with_color_and_caret_color() {
     report.write(&mut output).unwrap();
     print!("{}", String::from_utf8_lossy(&output));
 }
-#[cfg(feature = "colored_carets")]
+#[cfg(feature = "caret_color")]
 fn overlapping_labels_with_color_and_caret_color() {
+    use ::token::RgbColor;
+
     let mut report =
-        ReportBuilder::new("Another test input, more text, even more text").colored_carets();
+        ReportBuilder::new("Another test input, more text, even more text").caret_color();
     let label = Label::new(3..=14, "A label at the start\nwith two lines")
         .with_color(AnsiStyle::GREEN)
         .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
@@ -153,11 +155,14 @@ fn overlapping_labels_with_color_and_caret_color() {
         .with_child_label(ChildLabel::new("Child label Y"));
     report.push(label);
     let label = Label::new(14..=26, "Another overlapping label")
+        .with_caret_color(RgbColor::BRIGHT_CYAN)
         .with_color(AnsiStyle::CYAN)
         .with_child_label(ChildLabel::new("Child label 1").with_color(AnsiStyle::MAGENTA))
-        .with_child_label(ChildLabel::new("Child label 2"))
+        .with_child_label(ChildLabel::new("Child label 2").with_caret_color(RgbColor::GREEN))
         .with_child_label(
-            ChildLabel::new("Child label 3\nwith two lines").with_color(AnsiStyle::WHITE),
+            ChildLabel::new("Child label 3\nwith two lines")
+                .with_color(AnsiStyle::WHITE)
+                .with_caret_color(RgbColor::RED),
         );
     report.push(label);
     let report = report.finish().unwrap();
@@ -182,7 +187,7 @@ fn main() {
     empty_input();
     empty_label_message();
     empty_child_label_message();
-    #[cfg(feature = "colored_carets")]
+    #[cfg(feature = "caret_color")]
     {
         println!("----------------------------------------");
         single_label_with_color_and_caret_color();

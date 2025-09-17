@@ -1,4 +1,6 @@
 use ::std::fmt::Display;
+#[cfg(feature = "caret_color")]
+use ::token::RgbColor;
 use ::token::{AnsiStyle, LineTokenStream};
 
 use crate::{Report, TokenizedChildLabel, TokenizedLabelFull};
@@ -138,8 +140,8 @@ pub struct ReportBuilder {
     max_label_length: usize,
     /// If not set, it will be set to "max_label_length - CHILD_LABEL_PADDING" to offset the padding on the child labels
     max_child_label_length: Option<usize>,
-    #[cfg(feature = "colored_carets")]
-    colored_carets: bool,
+    #[cfg(feature = "caret_color")]
+    caret_color: bool,
 }
 
 impl ReportBuilder {
@@ -152,14 +154,14 @@ impl ReportBuilder {
             // Default max label length is 30 characters
             max_label_length: 30,
             max_child_label_length: None,
-            #[cfg(feature = "colored_carets")]
-            colored_carets: false,
+            #[cfg(feature = "caret_color")]
+            caret_color: false,
         }
     }
 
-    #[cfg(feature = "colored_carets")]
-    pub fn colored_carets(mut self) -> Self {
-        self.colored_carets = true;
+    #[cfg(feature = "caret_color")]
+    pub fn caret_color(mut self) -> Self {
+        self.caret_color = true;
         self
     }
 
@@ -209,6 +211,8 @@ pub struct Label {
     /// or if a message would repeat too much
     pub(super) child_labels: Vec<ChildLabel>,
     pub(super) color: Option<Vec<AnsiStyle>>,
+    #[cfg(feature = "caret_color")]
+    pub(super) caret_color: Option<RgbColor>,
 }
 impl Label {
     pub fn new<I: Display, R: IntoRange>(range: R, message: I) -> Self {
@@ -217,6 +221,8 @@ impl Label {
             message: message.to_string(),
             child_labels: Vec::new(),
             color: None,
+            #[cfg(feature = "caret_color")]
+            caret_color: None,
         }
     }
 
@@ -263,6 +269,11 @@ impl Label {
             message
         }
     }
+    #[cfg(feature = "caret_color")]
+    pub fn with_caret_color<I: Into<RgbColor>>(mut self, style: I) -> Self {
+        self.caret_color = Some(style.into());
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -270,6 +281,8 @@ pub struct ChildLabel {
     /// If no colors is set, it will be generated at runtime
     pub(super) message: String,
     pub(super) color: Option<Vec<AnsiStyle>>,
+    #[cfg(feature = "caret_color")]
+    pub(super) caret_color: Option<RgbColor>,
 }
 
 impl ChildLabel {
@@ -277,6 +290,8 @@ impl ChildLabel {
         Self {
             message: message.to_string(),
             color: None,
+            #[cfg(feature = "caret_color")]
+            caret_color: None,
         }
     }
 
@@ -292,7 +307,7 @@ impl ChildLabel {
 
     #[allow(dead_code)]
     pub(crate) fn get_message(&self) -> String {
-        let Self { message, color } = self;
+        let Self { message, color, .. } = self;
         let message = message.clone();
         if let Some(color) = color {
             // Wrap the message in color codes
@@ -304,13 +319,18 @@ impl ChildLabel {
 
     #[allow(dead_code)]
     pub(crate) fn into_message(self) -> String {
-        let Self { message, color } = self;
+        let Self { message, color, .. } = self;
         if let Some(color) = color {
             // Wrap the message in color codes
             color.into_iter().fold(message, |msg, c| c.with_color(&msg))
         } else {
             message
         }
+    }
+    #[cfg(feature = "caret_color")]
+    pub fn with_caret_color<I: Into<RgbColor>>(mut self, style: I) -> Self {
+        self.caret_color = Some(style.into());
+        self
     }
 }
 
@@ -383,6 +403,26 @@ impl ReportBuilder {
             .labels
             .iter()
             .map(|label| {
+                #[cfg(feature = "caret_color")]
+                let label_caret_color: Option<RgbColor> = if self.caret_color {
+                    label.caret_color.or_else(|| {
+                        // If the label has no caret color, use the first color of the label if it exists
+                        label.color.as_ref().and_then(|colors| {
+                            if colors.is_empty() {
+                                None
+                            } else {
+                                if let Ok(rbg_color) = RgbColor::try_from(colors[0]) {
+                                    Some(rbg_color)
+                                } else {
+                                    None
+                                }
+                            }
+                        })
+                    })
+                } else {
+                    None
+                };
+
                 TokenizedLabelFull::new_from(
                     label.range,
                     {
@@ -398,6 +438,26 @@ impl ReportBuilder {
                         stream
                     },
                     label.child_labels.clone().into_iter().map(|cl| {
+                        #[cfg(feature = "caret_color")]
+                        let child_caret_color = if self.caret_color {
+                            cl.caret_color.or_else(|| {
+                                // If the label has no caret color, use the first color of the label if it exists
+                                cl.color.as_ref().and_then(|colors| {
+                                    if colors.is_empty() {
+                                        None
+                                    } else {
+                                        if let Ok(rbg_color) = RgbColor::try_from(colors[0]) {
+                                            Some(rbg_color)
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                })
+                            })
+                        } else {
+                            None
+                        };
+
                         TokenizedChildLabel::new_from(
                             {
                                 let mut stream = LineTokenStream::from_str_with_length(
@@ -412,12 +472,12 @@ impl ReportBuilder {
                                 }
                                 stream
                             },
-                            #[cfg(feature = "colored_carets")]
-                            self.colored_carets,
+                            #[cfg(feature = "caret_color")]
+                            child_caret_color,
                         )
                     }),
-                    #[cfg(feature = "colored_carets")]
-                    self.colored_carets,
+                    #[cfg(feature = "caret_color")]
+                    label_caret_color,
                 )
             })
             .collect::<Vec<_>>();
