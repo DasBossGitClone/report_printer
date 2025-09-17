@@ -10,66 +10,87 @@ use ::std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub};
 /// When the feature is disabled, the methods will perform standard
 /// arithmetic operations (which may panic on overflow).
 pub trait SaturatingArithmetic<T>: Sized {
+    /// Performs the `+` operation with saturation.
     fn sat_add(self, rhs: T) -> Self
     where
         Self: Add<Self, Output = Self>;
+    /// Performs the `-` operation with saturation.
     fn sat_sub(self, rhs: T) -> Self
     where
         Self: Sub<Self, Output = Self>;
+    /// Performs the `*` operation with saturation.
     fn sat_mul(self, rhs: T) -> Self
     where
         Self: Mul<Self, Output = Self>;
+    /// Performs the `/` operation with saturation.
     fn sat_div(self, rhs: T) -> Self
     where
         Self: Div<Self, Output = Self>;
+    /// Performs the `%` (remainder / modulus) operation with saturation.
     fn sat_rem(self, rhs: T) -> Self
     where
         Self: Rem<Self, Output = Self>;
+    /// Returns the absolute value with saturation.
     fn sat_abs(self) -> Self
     where
         Self: Sized + PartialOrd + Neg<Output = Self> + Copy;
+    /// Performs the `+=` operation with saturation.
     fn sat_add_assign(&mut self, rhs: T)
     where
         Self: Add<Self, Output = Self>;
+    /// Performs the `-=` operation with saturation.
     fn sat_sub_assign(&mut self, rhs: T)
     where
         Self: Sub<Self, Output = Self>;
+    /// Performs the `*=` operation with saturation.
     fn sat_mul_assign(&mut self, rhs: T)
     where
         Self: Mul<Self, Output = Self>;
+    /// Performs the `/=` operation with saturation.
     fn sat_div_assign(&mut self, rhs: T)
     where
         Self: Div<Self, Output = Self>;
+    /// Performs the `%=` (remainder / modulus) operation with saturation.
     fn sat_rem_assign(&mut self, rhs: T)
     where
         Self: Rem<Self, Output = Self>;
+    /// Performs the `&` (bitwise AND) operation with saturation.
     fn sat_bitand(self, rhs: T) -> Self
     where
         Self: Sized + BitAnd<Self, Output = Self>;
+    /// Performs the `|` (bitwise OR) operation with saturation.
     fn sat_bitor(self, rhs: T) -> Self
     where
         Self: Sized + BitOr<Self, Output = Self>;
+    /// Performs the `^` (bitwise XOR) operation with saturation.
     fn sat_bitxor(self, rhs: T) -> Self
     where
         Self: Sized + BitXor<Self, Output = Self>;
+    /// Performs the `&=` (bitwise AND assignment) operation with saturation.
     fn sat_bitand_assign(&mut self, rhs: T)
     where
         Self: BitAnd<Self, Output = Self>;
+    /// Performs the `|=` (bitwise OR assignment) operation with saturation.
     fn sat_bitor_assign(&mut self, rhs: T)
     where
         Self: BitOr<Self, Output = Self>;
+    /// Performs the `^=` (bitwise XOR assignment) operation with saturation.
     fn sat_bitxor_assign(&mut self, rhs: T)
     where
         Self: BitXor<Self, Output = Self>;
+    /// Performs the `<<` (left shift) operation with saturation.
     fn sat_shl(self, rhs: u32) -> Self
     where
         Self: Sized + Shl<u32, Output = Self>;
+    /// Performs the `>>` (right shift) operation with saturation.
     fn sat_shr(self, rhs: u32) -> Self
     where
         Self: Sized + Shr<u32, Output = Self>;
+    /// Performs the `<<=` (left shift assignment) operation with saturation.
     fn sat_shl_assign(&mut self, rhs: u32)
     where
         Self: Shl<u32, Output = Self>;
+    /// Performs the `>>=` (right shift assignment) operation with saturation.
     fn sat_shr_assign(&mut self, rhs: u32)
     where
         Self: Shr<u32, Output = Self>;
