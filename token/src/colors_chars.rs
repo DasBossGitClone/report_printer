@@ -1,6 +1,10 @@
 #![deny(dead_code, unused)]
 
-use ::std::{fmt::Display, str::FromStr};
+use ::std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+    str::FromStr,
+};
 
 pub use misc_extensions::consts::colors::{
     BG_BLACK, BG_BLUE, BG_CYAN, BG_DARKBLACK, BG_DARKBLUE, BG_DARKCYAN, BG_DARKGREEN,
@@ -122,6 +126,12 @@ impl AnsiStyle {
     }
 }
 
+impl AsRef<AnsiStyle> for AnsiStyle {
+    fn as_ref(&self) -> &AnsiStyle {
+        self
+    }
+}
+
 impl FromStr for AnsiStyle {
     type Err = ();
 
@@ -147,6 +157,13 @@ impl FromStr for AnsiStyle {
         Err(())
     }
 }
+
+impl<I: Into<Color>> From<I> for AnsiStyle {
+    fn from(value: I) -> Self {
+        AnsiStyle::Color(value.into())
+    }
+}
+
 impl Display for AnsiStyle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_ansi_escape_sequence())
@@ -190,6 +207,12 @@ impl Display for Style {
             Style::Hidden => write!(f, "{}", HIDDEN),
             Style::Strikethrough => write!(f, "{}", STRIKETHROUGH),
         }
+    }
+}
+
+impl AsRef<Style> for Style {
+    fn as_ref(&self) -> &Style {
+        self
     }
 }
 
@@ -289,6 +312,12 @@ impl TryFrom<RgbColor> for Color {
     }
 }
 
+impl AsRef<Color> for Color {
+    fn as_ref(&self) -> &Color {
+        self
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RgbColor {
     pub(super) r: u8,
@@ -296,7 +325,22 @@ pub struct RgbColor {
     pub(super) b: u8,
 }
 impl RgbColor {
-    pub const RED: Self = Self::new(255, 0, 0);
+    pub const BLACK: Self = Self::new(12, 12, 12);
+    pub const RED: Self = Self::new(197, 15, 12);
+    pub const GREEN: Self = Self::new(19, 161, 14);
+    pub const YELLOW: Self = Self::new(193, 156, 0);
+    pub const BLUE: Self = Self::new(0, 55, 218);
+    pub const MAGENTA: Self = Self::new(136, 23, 152);
+    pub const CYAN: Self = Self::new(58, 150, 221);
+    pub const WHITE: Self = Self::new(204, 204, 204);
+    pub const BRIGHT_BLACK: Self = Self::new(118, 118, 118);
+    pub const BRIGHT_RED: Self = Self::new(231, 72, 86);
+    pub const BRIGHT_GREEN: Self = Self::new(22, 198, 12);
+    pub const BRIGHT_YELLOW: Self = Self::new(249, 241, 165);
+    pub const BRIGHT_BLUE: Self = Self::new(59, 120, 255);
+    pub const BRIGHT_MAGENTA: Self = Self::new(180, 0, 255);
+    pub const BRIGHT_CYAN: Self = Self::new(97, 214, 214);
+    pub const BRIGHT_WHITE: Self = Self::new(242, 242, 242);
 
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
@@ -335,6 +379,47 @@ impl RgbColor {
 impl Display for RgbColor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_ansi_escape_sequence())
+    }
+}
+impl<I: Into<Color>> From<I> for RgbColor {
+    fn from(value: I) -> Self {
+        let color = value.into();
+        match (color.color, color.bright) {
+            (ColorPalette::Black, false) => Self::BLACK,
+            (ColorPalette::Red, false) => Self::RED,
+            (ColorPalette::Green, false) => Self::GREEN,
+            (ColorPalette::Yellow, false) => Self::YELLOW,
+            (ColorPalette::Blue, false) => Self::BLUE,
+            (ColorPalette::Magenta, false) => Self::MAGENTA,
+            (ColorPalette::Cyan, false) => Self::CYAN,
+            (ColorPalette::White, false) => Self::WHITE,
+            (ColorPalette::Black, true) => Self::BRIGHT_BLACK,
+            (ColorPalette::Red, true) => Self::BRIGHT_RED,
+            (ColorPalette::Green, true) => Self::BRIGHT_GREEN,
+            (ColorPalette::Yellow, true) => Self::BRIGHT_YELLOW,
+            (ColorPalette::Blue, true) => Self::BRIGHT_BLUE,
+            (ColorPalette::Magenta, true) => Self::BRIGHT_MAGENTA,
+            (ColorPalette::Cyan, true) => Self::BRIGHT_CYAN,
+            (ColorPalette::White, true) => Self::BRIGHT_WHITE,
+        }
+    }
+}
+impl Deref for RgbColor {
+    type Target = (u8, u8, u8);
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*(self as *const RgbColor as *const (u8, u8, u8)) }
+    }
+}
+impl DerefMut for RgbColor {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(self as *mut RgbColor as *mut (u8, u8, u8)) }
+    }
+}
+
+impl AsRef<RgbColor> for RgbColor {
+    fn as_ref(&self) -> &RgbColor {
+        self
     }
 }
 
