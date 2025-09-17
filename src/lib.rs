@@ -9,4 +9,8 @@ pub(crate) use find_iter::*;
 
 pub use ::token::{AnsiStyle, Color, RgbColor, Style, impl_field};
 pub use builder::{ChildLabel, Error, IntoRange, Label, RangeInclusive, ReportBuilder};
-pub use printer::{set_arrow_label_padding, set_child_label_offset};
+pub mod config {
+    use super::printer;
+    pub use printer::set_arrow_label_padding;
+    pub use printer::set_child_label_offset;
+}
