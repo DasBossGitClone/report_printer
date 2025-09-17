@@ -1,4 +1,4 @@
-use ::report_printer::{AnsiStyle, ChildLabel, Error, Label, RangeInclusive, ReportBuilder};
+use ::reporter::{AnsiStyle, ChildLabel, Error, Label, RangeInclusive, ReportBuilder};
 
 fn single_line() {
     let mut report = ReportBuilder::new("Longer Test - Another test input");
