@@ -12,6 +12,7 @@ mod carets;
 mod underbar;
 pub(super) use builder::*;
 pub(crate) use carets::*;
+pub use carets::{set_arrow_label_padding, set_child_label_offset};
 
 impl Report {
     pub fn write<W: Write>(self, writer: &mut W) -> io::Result<()> {

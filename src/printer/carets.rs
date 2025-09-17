@@ -1,10 +1,23 @@
 use super::*;
 
+// We wanna be able to allow one to configure these at runtime
+// thus we use static mut variables here
 /// The amount of white-space padding to add directly after the arrow and before the label message
-const ARROR_LABEL_PADDING: usize = 1;
+static mut ARROR_LABEL_PADDING: usize = 1;
 
 /// The offset from the parent label to the child labels
-const CHILD_LABEL_OFFSET: usize = 3;
+static mut CHILD_LABEL_OFFSET: usize = 3;
+
+pub fn set_arrow_label_padding(padding: usize) {
+    unsafe {
+        ARROR_LABEL_PADDING = padding;
+    }
+}
+pub fn set_child_label_offset(offset: usize) {
+    unsafe {
+        CHILD_LABEL_OFFSET = offset;
+    }
+}
 
 crate::impl_field!(
     ReportCaret,start,usize;
@@ -238,6 +251,12 @@ impl ReportCaret {
         self.r_positions.len()
     }
     pub(self) fn format(mut self) -> Option<Lines> {
+        // We wanna deref them once, so we dont need to do unsafe blocks everywhere else
+        #[allow(non_snake_case)]
+        let ARROR_LABEL_PADDING_REF = unsafe { ARROR_LABEL_PADDING };
+        #[allow(non_snake_case)]
+        let CHILD_LABEL_OFFSET_DEREF = unsafe { CHILD_LABEL_OFFSET };
+
         let mut lines = Lines::new();
 
         if self.is_empty() {
@@ -387,7 +406,7 @@ impl ReportCaret {
                         } else {
                             Token::VCaret
                         },
-                        Token::Space(ARROR_LABEL_PADDING),
+                        Token::Space(ARROR_LABEL_PADDING_REF),
                     ]);
                     label_line.extend(line);
                     lines.push(Line::Label(label_line));
@@ -442,7 +461,7 @@ impl ReportCaret {
                             pcc(Token::HDown),
                             pcc(Token::HCaret(2)),
                             pcc(Token::VLeft),
-                            Token::Space(ARROR_LABEL_PADDING),
+                            Token::Space(ARROR_LABEL_PADDING_REF),
                         ]);
                         label_line.extend(line);
                         lines.push(Line::Label(label_line));
@@ -454,7 +473,7 @@ impl ReportCaret {
                                 Token::Space(2),
                                 pcc(Token::VCaret),
                                 // offset by 1 to indicate that the line was split
-                                Token::Space(ARROR_LABEL_PADDING + 1),
+                                Token::Space(ARROR_LABEL_PADDING_REF + 1),
                             ]);
                             label_line.extend(line);
                             lines.push(Line::LabelSeq(label_line));
@@ -468,7 +487,7 @@ impl ReportCaret {
                         pcc(Token::HDown),
                         pcc(Token::HCaret(2)),
                         pcc(Token::LArrow),
-                        Token::Space(ARROR_LABEL_PADDING),
+                        Token::Space(ARROR_LABEL_PADDING_REF),
                     ]);
                     label_line.extend(message.into_iter().next().unwrap());
                     lines.push(Line::Label(label_line));
@@ -539,36 +558,36 @@ impl ReportCaret {
                             (true, true, true) => {
                                 child_line.push([
                                     ccc(Token::UpRight),
-                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF + 2)),
                                     ccc(Token::LArrow),
-                                    Token::Space(ARROR_LABEL_PADDING),
+                                    Token::Space(ARROR_LABEL_PADDING_REF),
                                 ]);
                             }
                             // Only line in label-child, but not the last child label
                             (true, false, true) => {
                                 child_line.push([
                                     pcc(Token::VRight),
-                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF + 2)),
                                     ccc(Token::LArrow),
-                                    Token::Space(ARROR_LABEL_PADDING),
+                                    Token::Space(ARROR_LABEL_PADDING_REF),
                                 ]);
                             }
                             // First line but not last in label-child, not last child label
                             (true, true, false) => {
                                 child_line.push([
                                     pcc(Token::UpRight),
-                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF + 2)),
                                     ccc(Token::VLeft),
-                                    Token::Space(ARROR_LABEL_PADDING),
+                                    Token::Space(ARROR_LABEL_PADDING_REF),
                                 ]);
                             }
                             // First line but not last in label-child, last child label
                             (true, false, false) => {
                                 child_line.push([
                                     pcc(Token::VRight),
-                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF + 2)),
                                     ccc(Token::VLeft),
-                                    Token::Space(ARROR_LABEL_PADDING),
+                                    Token::Space(ARROR_LABEL_PADDING_REF),
                                 ]);
                             }
                             // not last Child label, but not the only line
@@ -576,20 +595,20 @@ impl ReportCaret {
                                 child_line.push([
                                     // We do not wanna style the first caret, as it is the continuation of the parent label
                                     Token::VCaret,
-                                    Token::Space(CHILD_LABEL_OFFSET + 2),
+                                    Token::Space(CHILD_LABEL_OFFSET_DEREF + 2),
                                     ccc(Token::VCaret),
                                     // offset by 1 to indicate that the line was split
-                                    Token::Space(ARROR_LABEL_PADDING + 1),
+                                    Token::Space(ARROR_LABEL_PADDING_REF + 1),
                                 ]);
                             }
                             // Last Child label, but not the only line
                             (_, true, false) => {
                                 child_line.push([
                                     // We need to add an extra space here, as there are not more child labels, thus no carets which would offset the line
-                                    Token::Space(CHILD_LABEL_OFFSET + 3),
+                                    Token::Space(CHILD_LABEL_OFFSET_DEREF + 3),
                                     ccc(Token::VCaret),
                                     // offset by 1 to indicate that the line was split
-                                    Token::Space(ARROR_LABEL_PADDING + 1),
+                                    Token::Space(ARROR_LABEL_PADDING_REF + 1),
                                 ]);
                             }
                             (_, _, true) => {
