@@ -3,26 +3,38 @@ use super::*;
 impl Report {
     pub(super) fn generate_underbar(
         input_label_offset: usize,
-        labels: impl IntoIterator<Item = TokenizedLabel>,
+        labels: impl IntoIterator<Item = TokenizedLabelFull>,
     ) -> ReportLabels {
         let offset = input_label_offset;
 
         // (underbar_start, underbar_range, caret_positionals (relative to start, label_message, child_labels))
-        /* let mut labels: Vec<(
+        // Calculate the down caret (┬) positions and underbar ranges
+        let labels: Vec<(
             usize,
             RangeInclusive,
-            Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
-        )> = Vec::with_capacity(labels.len()); */
-
-        // Calculate the down caret (┬) positions and underbar ranges
-        let labels = labels
+            Vec<(usize, usize, TokenizedLabel, Vec<TokenizedChildLabel>)>,
+        )> = labels
             .into_iter()
             .map(|label| {
-                let TokenizedLabel {
+                let TokenizedLabelFull {
                     range,
                     message,
                     child_labels,
+                    #[cfg(feature = "colored_carets")]
+                    colored_carets,
                 } = label;
+
+                #[cfg(feature = "colored_carets")]
+                let colored_carets = if let Some(color) = colored_carets {
+                    if let Some(color) = color {
+                        Some(color)
+                    } else {
+                        // If the label itself has no color, but the message does, use that color
+                        colorization::TokenStreamColors::get_color(&message)
+                    }
+                } else {
+                    None
+                };
 
                 // If a offset is set, the input is prepended by 3x. and a space
                 let offset = offset.saturating_sub(4);
@@ -37,24 +49,28 @@ impl Report {
                 let label_line: (
                     usize,
                     RangeInclusive,
-                    Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
+                    Vec<(usize, usize, TokenizedLabel, Vec<TokenizedChildLabel>)>,
                 ) = (
                     start,
                     underbar_range,
                     // Generate the underbar line positionals
                     // It is important that this is generated first, as multiple labels can overlap and we cannot change after printing
-                    if underbar_range_len > 5 {
-                        vec![(2, underbar_range_len, message.clone(), child_labels.clone())]
-                    } else if underbar_range_len > 3 {
-                        vec![(
-                            (underbar_range_len / 2).saturating_sub(1),
-                            underbar_range_len,
-                            message.clone(),
-                            child_labels.clone(),
-                        )]
-                    } else {
-                        vec![(0, underbar_range_len, message.clone(), child_labels.clone())]
-                    },
+                    vec![(
+                        if underbar_range_len > 5 {
+                            2
+                        } else if underbar_range_len > 3 {
+                            (underbar_range_len / 2).saturating_sub(1)
+                        } else {
+                            0
+                        },
+                        underbar_range_len,
+                        TokenizedLabel::new(
+                            message,
+                            #[cfg(feature = "colored_carets")]
+                            colored_carets,
+                        ),
+                        child_labels.clone(),
+                    )],
                 );
 
                 label_line
@@ -65,7 +81,7 @@ impl Report {
         let mut new_labels: Vec<(
             usize,
             RangeInclusive,
-            Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
+            Vec<(usize, usize, TokenizedLabel, Vec<TokenizedChildLabel>)>,
         )> = Vec::with_capacity(labels.len());
 
         if let Some(rem) = labels.into_iter().fold(
@@ -73,7 +89,7 @@ impl Report {
             |mut current: Option<(
                 usize,
                 RangeInclusive,
-                Vec<(usize, usize, LineTokenStream, Vec<TokenizedChildLabel>)>,
+                Vec<(usize, usize, TokenizedLabel, Vec<TokenizedChildLabel>)>,
             )>,
              other| {
                 if let Some((current_start, current_range, mut current_labels)) = current.take() {
@@ -127,7 +143,7 @@ impl Report {
         });
 
         // Now we wanna transform each label from "labels" into a ReportSegment
-        // aka the mapping is pretty much
+        // the mapping is pretty much:
         /*
         ReportCaret {
             start: usize [1],

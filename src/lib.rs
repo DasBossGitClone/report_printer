@@ -1,4 +1,4 @@
-#![feature(trivial_bounds)]
+#![feature(trivial_bounds, iter_map_windows)]
 #![deny(dead_code, unused)]
 
 mod builder;

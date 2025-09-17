@@ -125,6 +125,47 @@ fn empty_child_label_message() {
     assert_eq!(Error::LabelChildEmptyMessage, report.finish().unwrap_err());
 }
 
+#[cfg(feature = "colored_carets")]
+fn single_label_with_color_and_caret_color() {
+    let mut report = ReportBuilder::new("Another test input").colored_carets();
+    let label = Label::new(0..13, "A label at the start")
+        .with_color(AnsiStyle::GREEN)
+        .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
+        .with_child_label(ChildLabel::new("Child label B"));
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+#[cfg(feature = "colored_carets")]
+fn overlapping_labels_with_color_and_caret_color() {
+    let mut report =
+        ReportBuilder::new("Another test input, more text, even more text").colored_carets();
+    let label = Label::new(3..=14, "A label at the start\nwith two lines")
+        .with_color(AnsiStyle::GREEN)
+        .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
+        .with_child_label(ChildLabel::new("Child label B"));
+    report.push(label);
+    let label = Label::new(7..=15, "Overlapping label")
+        .with_color(AnsiStyle::YELLOW)
+        .with_child_label(ChildLabel::new("Child label X").with_color(AnsiStyle::BLUE))
+        .with_child_label(ChildLabel::new("Child label Y"));
+    report.push(label);
+    let label = Label::new(14..=26, "Another overlapping label")
+        .with_color(AnsiStyle::CYAN)
+        .with_child_label(ChildLabel::new("Child label 1").with_color(AnsiStyle::MAGENTA))
+        .with_child_label(ChildLabel::new("Child label 2"))
+        .with_child_label(
+            ChildLabel::new("Child label 3\nwith two lines").with_color(AnsiStyle::WHITE),
+        );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
 fn main() {
     single_line();
     println!("----------------------------------------");
@@ -141,4 +182,11 @@ fn main() {
     empty_input();
     empty_label_message();
     empty_child_label_message();
+    #[cfg(feature = "colored_carets")]
+    {
+        println!("----------------------------------------");
+        single_label_with_color_and_caret_color();
+        println!("----------------------------------------");
+        overlapping_labels_with_color_and_caret_color();
+    }
 }

@@ -1,7 +1,7 @@
 use ::std::fmt::Display;
 use ::token::{AnsiStyle, LineTokenStream};
 
-use crate::{Report, TokenizedChildLabel, TokenizedLabel};
+use crate::{Report, TokenizedChildLabel, TokenizedLabelFull};
 
 pub const CHILD_LABEL_PADDING: usize = 4;
 
@@ -138,6 +138,8 @@ pub struct ReportBuilder {
     max_label_length: usize,
     /// If not set, it will be set to "max_label_length - CHILD_LABEL_PADDING" to offset the padding on the child labels
     max_child_label_length: Option<usize>,
+    #[cfg(feature = "colored_carets")]
+    colored_carets: bool,
 }
 
 impl ReportBuilder {
@@ -150,7 +152,15 @@ impl ReportBuilder {
             // Default max label length is 30 characters
             max_label_length: 30,
             max_child_label_length: None,
+            #[cfg(feature = "colored_carets")]
+            colored_carets: false,
         }
+    }
+
+    #[cfg(feature = "colored_carets")]
+    pub fn colored_carets(mut self) -> Self {
+        self.colored_carets = true;
+        self
     }
 
     pub fn with_range(self) -> Self {
@@ -373,7 +383,7 @@ impl ReportBuilder {
             .labels
             .iter()
             .map(|label| {
-                TokenizedLabel::new_from(
+                TokenizedLabelFull::new_from(
                     label.range,
                     {
                         let mut stream = LineTokenStream::from_str_with_length(
@@ -388,20 +398,26 @@ impl ReportBuilder {
                         stream
                     },
                     label.child_labels.clone().into_iter().map(|cl| {
-                        TokenizedChildLabel::new_from({
-                            let mut stream = LineTokenStream::from_str_with_length(
-                                &cl.message,
-                                self.max_child_label_length
-                                    .unwrap_or(self.max_label_length - CHILD_LABEL_PADDING),
-                            );
-                            if let Some(color) = cl.color {
-                                color.into_iter().for_each(|c| {
-                                    stream.on_color_all(c);
-                                });
-                            }
-                            stream
-                        })
+                        TokenizedChildLabel::new_from(
+                            {
+                                let mut stream = LineTokenStream::from_str_with_length(
+                                    &cl.message,
+                                    self.max_child_label_length
+                                        .unwrap_or(self.max_label_length - CHILD_LABEL_PADDING),
+                                );
+                                if let Some(color) = cl.color {
+                                    color.into_iter().for_each(|c| {
+                                        stream.on_color_all(c);
+                                    });
+                                }
+                                stream
+                            },
+                            #[cfg(feature = "colored_carets")]
+                            self.colored_carets,
+                        )
                     }),
+                    #[cfg(feature = "colored_carets")]
+                    self.colored_carets,
                 )
             })
             .collect::<Vec<_>>();

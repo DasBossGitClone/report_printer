@@ -74,8 +74,8 @@ crate::impl_field!(
     ReportCaret,r_positions,Vec<ReportLabel>;
     CaretLine,main,TokenStream;
     ReportLabel,position,usize;
-    ReportLabel,message,LineTokenStream;
-    ReportLabel,child_labels,Vec<LineTokenStream>;
+    ReportLabel,message,TokenizedLabel;
+    ReportLabel,child_labels,Vec<TokenizedChildLabel>;
 );
 
 #[derive(Debug, Clone, derive_more::Into, derive_more::From)]
@@ -313,19 +313,45 @@ impl ReportCaret {
 
         let mut last_index = 0;
 
-        for label in self.iter().rev() {
+        let mut last_color: Option<&RgbColor> = None;
+
+        for (i, label) in self.iter().rev().enumerate() {
             let pos = label.position();
+
             let sep = pos.saturating_sub(last_index);
-            underbar.push(Token::HCaret(sep));
-            underbar.push(Token::HDown);
+
+            #[cfg(feature = "colored_carets")]
+            {
+                last_color = label.message.ref_color()
+            };
+            #[cfg(not(feature = "colored_carets"))]
+            {
+                last_color = None
+            };
+            underbar.push(Token::HCaret(sep).try_with_coloring_feature(last_color));
+            underbar.push(Token::HDown.try_with_coloring_feature(last_color));
             last_index = pos + 1;
+
+            if let Some(next) = self.iter().rev().nth(i + 1) {
+                let next_pos = next.position();
+
+                // Cover the underbar until the "next" label
+
+                // We add 2, as we need to cover the HDown and the position of the next label
+                let next_sep = next_pos.saturating_sub(last_index + 2);
+                underbar.push(Token::HCaret(next_sep).try_with_coloring_feature(last_color));
+                last_index += next_sep;
+            }
         }
         if last_index < self.end.saturating_sub(self.start) {
-            underbar.push(Token::HCaret(
-                self.end
-                    .saturating_sub(self.start)
-                    .saturating_sub(last_index),
-            ));
+            underbar.push(
+                Token::HCaret(
+                    self.end
+                        .saturating_sub(self.start)
+                        .saturating_sub(last_index),
+                )
+                .try_with_coloring_feature(last_color),
+            );
         }
 
         lines.push(Line::Underbar(underbar));
@@ -337,8 +363,14 @@ impl ReportCaret {
         for label in self.iter().rev() {
             let pos = label.position();
             let sep = pos.saturating_sub(last_index);
+
+            #[cfg(feature = "colored_carets")]
+            let label_caret_color = label.message.ref_color();
+            #[cfg(not(feature = "colored_carets"))]
+            let label_caret_color: Option<&RgbColor> = None;
+
             underbar_sep.push(Token::Space(sep));
-            underbar_sep.push(Token::VCaret);
+            underbar_sep.push(Token::VCaret.try_with_coloring_feature(label_caret_color));
             last_index = pos + 1;
         }
         if last_index < self.end.saturating_sub(self.start) {
@@ -361,21 +393,40 @@ impl ReportCaret {
 
             let mut current_pos = 0;
 
+            // We wanna use the color of the first label here, as this is also used for the Arrows
+            #[cfg(feature = "colored_carets")]
+            let label_color: Option<&RgbColor> = self
+                .iter()
+                .rev()
+                .next()
+                .expect("No labels")
+                .ref_label_color();
+            #[cfg(not(feature = "colored_carets"))]
+            let label_color: Option<&RgbColor> = None;
+
             for (i, label) in self.iter().rev().enumerate() {
                 let pos = label.position();
+
                 // Insert spaces until we reach the next position, if its the first position, else we draw H_CARET
                 if i == 0 {
                     label_line.push(Token::Space(pos.saturating_sub(current_pos)));
                 } else {
-                    label_line.push(Token::HCaret(pos.saturating_sub(current_pos)));
+                    label_line.push(
+                        Token::HCaret(pos.saturating_sub(current_pos))
+                            .try_with_coloring_feature(label_color),
+                    );
                 }
 
                 current_pos = pos + 1;
+
                 if i == 0 {
                     // Transition from H_CARET to UP_RIGHT
-                    label_line.push([Token::UpRight, Token::HCaret(1)]);
+                    label_line.push([
+                        Token::UpRight.try_with_coloring_feature(label_color),
+                        Token::HCaret(1).try_with_coloring_feature(label_color),
+                    ]);
                 } else {
-                    label_line.push(Token::HCaret(1));
+                    label_line.push(Token::HCaret(1).try_with_coloring_feature(label_color));
                 }
             }
             // pop the position, so we dont print it again in the separator line
@@ -404,6 +455,22 @@ impl ReportCaret {
                     lines.push(Line::Label(label_line));
                 }
             } else {
+                #[cfg(feature = "colored_carets")]
+                let label_caret_color: Option<RgbColor> = message.get_color();
+                // pcc = parent_colored_caret
+                // Shorthand to apply coloring if enabled
+                // Its just there to reduce boilerplate
+                let pcc = |token: Token| -> Token {
+                    #[cfg(feature = "colored_carets")]
+                    {
+                        token.try_with_coloring_feature(label_caret_color.as_ref())
+                    }
+                    #[cfg(not(feature = "colored_carets"))]
+                    {
+                        token
+                    }
+                };
+
                 if message.is_multi_line() {
                     // We need a separator line, for the following lines, as it contains the carets
                     let mut sep = self
@@ -433,10 +500,10 @@ impl ReportCaret {
                     let mut message = message.into_iter();
                     if let Some(line) = message.next() {
                         label_line.push([
-                            Token::HCaret(1),
-                            Token::HDown,
-                            Token::HCaret(2),
-                            Token::VLeft,
+                            pcc(Token::HCaret(1)),
+                            pcc(Token::HDown),
+                            pcc(Token::HCaret(2)),
+                            pcc(Token::VLeft),
                             Token::Space(ARROR_LABEL_PADDING),
                         ]);
                         label_line.extend(line);
@@ -445,9 +512,9 @@ impl ReportCaret {
                         for line in message {
                             let mut label_line = sep.clone();
                             label_line.push([
-                                Token::VCaret,
+                                pcc(Token::VCaret),
                                 Token::Space(2),
-                                Token::VCaret,
+                                pcc(Token::VCaret),
                                 // offset by 1 to indicate that the line was split
                                 Token::Space(ARROR_LABEL_PADDING + 1),
                             ]);
@@ -459,10 +526,10 @@ impl ReportCaret {
                     }
                 } else {
                     label_line.push([
-                        Token::HCaret(1),
-                        Token::HDown,
-                        Token::HCaret(2),
-                        Token::LArrow,
+                        pcc(Token::HCaret(1)),
+                        pcc(Token::HDown),
+                        pcc(Token::HCaret(2)),
+                        pcc(Token::LArrow),
                         Token::Space(ARROR_LABEL_PADDING),
                     ]);
                     label_line.extend(message.into_iter().next().unwrap());
@@ -497,12 +564,30 @@ impl ReportCaret {
                 }
                 // We wanna clone it here, as this is the separator for all child labels
                 let mut child_sep_with_caret = child_sep.clone();
-                child_sep_with_caret.push(Token::VCaret);
+                child_sep_with_caret.push(pcc(Token::VCaret));
                 lines.push(Line::Sep(child_sep_with_caret.clone()));
                 let child_labels_len = child_labels.len();
                 for (i, child) in child_labels.into_iter().enumerate() {
                     // We can "unsafely" sub here, as the for loop ensures that child_labels_len > 0
                     let is_last_child_label = i == child_labels_len - 1;
+
+                    #[cfg(feature = "colored_carets")]
+                    let child_label_caret_color: Option<RgbColor> =
+                        child.get_color().or(label_caret_color.clone());
+                    // ccc = child_colored_caret
+                    // Shorthand to apply coloring if enabled
+                    // Its just there to reduce boilerplate
+                    let ccc = |token: Token| -> Token {
+                        #[cfg(feature = "colored_carets")]
+                        {
+                            token.try_with_coloring_feature(child_label_caret_color.as_ref())
+                        }
+                        #[cfg(not(feature = "colored_carets"))]
+                        {
+                            token
+                        }
+                    };
+
                     // Each child label is prepended by the same "child_sep" as that resembles the carets of the other labels
                     for child_label_line in child.into_iter() {
                         let mut child_line = child_sep.clone();
@@ -515,45 +600,46 @@ impl ReportCaret {
                             // Only line in the last child label
                             (true, true, true) => {
                                 child_line.push([
-                                    Token::UpRight,
-                                    Token::HCaret(CHILD_LABEL_OFFSET + 2),
-                                    Token::LArrow,
+                                    ccc(Token::UpRight),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
+                                    ccc(Token::LArrow),
                                     Token::Space(ARROR_LABEL_PADDING),
                                 ]);
                             }
                             // Only line in label-child, but not the last child label
                             (true, false, true) => {
                                 child_line.push([
-                                    Token::VRight,
-                                    Token::HCaret(CHILD_LABEL_OFFSET + 2),
-                                    Token::LArrow,
+                                    pcc(Token::VRight),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
+                                    ccc(Token::LArrow),
                                     Token::Space(ARROR_LABEL_PADDING),
                                 ]);
                             }
                             // First line but not last in label-child, not last child label
                             (true, true, false) => {
                                 child_line.push([
-                                    Token::UpRight,
-                                    Token::HCaret(CHILD_LABEL_OFFSET + 2),
-                                    Token::VLeft,
+                                    ccc(Token::UpRight),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
+                                    ccc(Token::VLeft),
                                     Token::Space(ARROR_LABEL_PADDING),
                                 ]);
                             }
                             // First line but not last in label-child, last child label
                             (true, false, false) => {
                                 child_line.push([
-                                    Token::VRight,
-                                    Token::HCaret(CHILD_LABEL_OFFSET + 2),
-                                    Token::VLeft,
+                                    pcc(Token::VRight),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET + 2)),
+                                    ccc(Token::VLeft),
                                     Token::Space(ARROR_LABEL_PADDING),
                                 ]);
                             }
                             // not last Child label, but not the only line
                             (_, false, false) => {
                                 child_line.push([
+                                    // We do not wanna style the first caret, as it is the continuation of the parent label
                                     Token::VCaret,
                                     Token::Space(CHILD_LABEL_OFFSET + 2),
-                                    Token::VCaret,
+                                    ccc(Token::VCaret),
                                     // offset by 1 to indicate that the line was split
                                     Token::Space(ARROR_LABEL_PADDING + 1),
                                 ]);
@@ -563,7 +649,7 @@ impl ReportCaret {
                                 child_line.push([
                                     // We need to add an extra space here, as there are not more child labels, thus no carets which would offset the line
                                     Token::Space(CHILD_LABEL_OFFSET + 3),
-                                    Token::VCaret,
+                                    ccc(Token::VCaret),
                                     // offset by 1 to indicate that the line was split
                                     Token::Space(ARROR_LABEL_PADDING + 1),
                                 ]);
@@ -605,11 +691,16 @@ impl ReportCaret {
         let mut sep: TokenStream = TokenStream::new();
         sep.push(Token::Space(self.start));
         let mut current_pos = 0;
+
         for label in self.iter().rev() {
             let pos = label.position();
             // Insert spaces until we reach the next position
             sep.push(Token::Space(pos.saturating_sub(current_pos)));
             current_pos = pos + 1;
+            #[cfg(feature = "colored_carets")]
+            sep.push(Token::VCaret.try_with_coloring_feature(label.ref_label_color()));
+
+            #[cfg(not(feature = "colored_carets"))]
             sep.push(Token::VCaret);
         }
         Some(Line::Sep(sep))
@@ -629,8 +720,8 @@ impl Display for ReportCaret {
 pub struct ReportLabel {
     pub position: usize,
     pub length: usize,
-    pub message: LineTokenStream,
-    pub child_labels: Vec<LineTokenStream>,
+    pub message: TokenizedLabel,
+    pub child_labels: Vec<TokenizedChildLabel>,
 }
 
 impl PartialEq for ReportLabel {
@@ -650,7 +741,7 @@ impl Ord for ReportLabel {
     }
 }
 impl ReportLabel {
-    pub fn new<I: Into<LineTokenStream>, C: Into<LineTokenStream>, V: IntoIterator<Item = C>>(
+    pub fn new<I: Into<TokenizedLabel>, C: Into<TokenizedChildLabel>, V: IntoIterator<Item = C>>(
         position: usize,
         length: usize,
         message: I,
@@ -664,8 +755,8 @@ impl ReportLabel {
         }
     }
     pub fn from_iter<
-        I: Into<LineTokenStream>,
-        C: Into<LineTokenStream>,
+        I: Into<TokenizedLabel>,
+        C: Into<TokenizedChildLabel>,
         V: IntoIterator<Item = C>,
     >(
         position: usize,
@@ -680,9 +771,13 @@ impl ReportLabel {
             child_labels: child_labels.into_iter().map(Into::into).collect(),
         }
     }
+    #[cfg(feature = "colored_carets")]
+    pub(crate) fn ref_label_color(&self) -> Option<&RgbColor> {
+        self.message.ref_color()
+    }
 }
 
-impl<I: Into<LineTokenStream>, C: Into<LineTokenStream>, V: IntoIterator<Item = C>>
+impl<I: Into<TokenizedLabel>, C: Into<TokenizedChildLabel>, V: IntoIterator<Item = C>>
     From<(usize, usize, I, V)> for ReportLabel
 {
     fn from(value: (usize, usize, I, V)) -> Self {

@@ -1,7 +1,11 @@
 [package]
     edition = "2024"
     name    = "reporter"
-    version = "1.0.1"
+    version = "1.1.0"
+
+[features]
+    default = []
+    colored_carets = []
 
 [dependencies]
     derive_more = { version = "2.0.1", features = [
