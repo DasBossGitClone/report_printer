@@ -79,48 +79,111 @@ pub trait SaturatingArithmetic<T>: Sized {
 macro_rules! impl_saturating_arithmetic {
     ($self_ty:ty, $other_ty:ty, $self:ident, $other:ident,
     [
-        $sat_op_1:expr,
-        $std_op_1:expr,
-        $sat_op_2:expr,
-        $std_op_2:expr,
-        $sat_op_3:expr,
-        $std_op_3:expr,
-        $sat_op_4:expr,
-        $std_op_4:expr,
-        $sat_op_5:expr,
-        $std_op_5:expr,
-        $sat_op_6:expr,
-        $std_op_6:expr,
-        $sat_op_7:expr,
-        $std_op_7:expr,
-        $sat_op_8:expr,
-        $std_op_8:expr,
-        $sat_op_9:expr,
-        $std_op_9:expr,
-        $sat_op_10:expr,
-        $std_op_10:expr,
-        $sat_op_11:expr,
-        $std_op_11:expr,
-        $sat_op_12:expr,
-        $std_op_12:expr,
-        $sat_op_13:expr,
-        $std_op_13:expr,
-        $sat_op_14:expr,
-        $std_op_14:expr,
-        $sat_op_15:expr,
-        $std_op_15:expr,
-        $sat_op_16:expr,
-        $std_op_16:expr,
-        $sat_op_17:expr,
-        $std_op_17:expr,
-        $sat_op_18:expr,
-        $std_op_18:expr,
-        $sat_op_19:expr,
-        $std_op_19:expr,
-        $sat_op_20:expr,
-        $std_op_20:expr,
-        $sat_op_21:expr,
-        $std_op_21:expr
+        (
+            $sat_op_1:expr,
+            $std_op_1:expr
+            $(,)?
+        ),
+        (
+            $sat_op_2:expr,
+            $std_op_2:expr
+            $(,)?
+        ),
+        (
+            $sat_op_3:expr,
+            $std_op_3:expr
+            $(,)?
+        ),
+        (
+            $sat_op_4:expr,
+            $std_op_4:expr
+            $(,)?
+        ),
+        (
+            $sat_op_5:expr,
+            $std_op_5:expr
+            $(,)?
+        ),
+        (
+            $sat_op_6:expr,
+            $std_op_6:expr
+            $(,)?
+        ),
+        (
+            $sat_op_7:expr,
+            $std_op_7:expr
+            $(,)?
+        ),
+        (
+            $sat_op_8:expr,
+            $std_op_8:expr
+            $(,)?
+        ),
+        (
+            $sat_op_9:expr,
+            $std_op_9:expr
+            $(,)?
+        ),
+        (
+            $sat_op_10:expr,
+            $std_op_10:expr
+            $(,)?
+        ),
+        (
+            $sat_op_11:expr,
+            $std_op_11:expr
+            $(,)?
+        ),
+        (
+            $sat_op_12:expr,
+            $std_op_12:expr
+            $(,)?
+        ),
+        (
+            $sat_op_13:expr,
+            $std_op_13:expr
+            $(,)?
+        ),
+        (
+            $sat_op_14:expr,
+            $std_op_14:expr
+            $(,)?
+        ),
+        (
+            $sat_op_15:expr,
+            $std_op_15:expr
+            $(,)?
+        ),
+        (
+            $sat_op_16:expr,
+            $std_op_16:expr
+            $(,)?
+        ),
+        (
+            $sat_op_17:expr,
+            $std_op_17:expr
+            $(,)?
+        ),
+        (
+            $sat_op_18:expr,
+            $std_op_18:expr
+            $(,)?
+        ),
+        (
+            $sat_op_19:expr,
+            $std_op_19:expr
+            $(,)?
+        ),
+        (
+            $sat_op_20:expr,
+            $std_op_20:expr
+            $(,)?
+        ),
+        (
+            $sat_op_21:expr,
+            $std_op_21:expr
+            $(,)?
+        )
         $(,)?
     ]) => {
         impl SaturatingArithmetic<$other_ty> for $self_ty {
@@ -469,48 +532,111 @@ macro_rules! impl_saturating_arithmetic {
                 $self:ident,
                 $other:ident,
                 [
-                    $sat_op_1:expr,
-                    $std_op_1:expr,
-                    $sat_op_2:expr,
-                    $std_op_2:expr,
-                    $sat_op_3:expr,
-                    $std_op_3:expr,
-                    $sat_op_4:expr,
-                    $std_op_4:expr,
-                    $sat_op_5:expr,
-                    $std_op_5:expr,
-                    $sat_op_6:expr,
-                    $std_op_6:expr,
-                    $sat_op_7:expr,
-                    $std_op_7:expr,
-                    $sat_op_8:expr,
-                    $std_op_8:expr,
-                    $sat_op_9:expr,
-                    $std_op_9:expr,
-                    $sat_op_10:expr,
-                    $std_op_10:expr,
-                    $sat_op_11:expr,
-                    $std_op_11:expr,
-                    $sat_op_12:expr,
-                    $std_op_12:expr,
-                    $sat_op_13:expr,
-                    $std_op_13:expr,
-                    $sat_op_14:expr,
-                    $std_op_14:expr,
-                    $sat_op_15:expr,
-                    $std_op_15:expr,
-                    $sat_op_16:expr,
-                    $std_op_16:expr,
-                    $sat_op_17:expr,
-                    $std_op_17:expr,
-                    $sat_op_18:expr,
-                    $std_op_18:expr,
-                    $sat_op_19:expr,
-                    $std_op_19:expr,
-                    $sat_op_20:expr,
-                    $std_op_20:expr,
-                    $sat_op_21:expr,
-                    $std_op_21:expr
+                    (
+                        $sat_op_1:expr,
+                        $std_op_1:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_2:expr,
+                        $std_op_2:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_3:expr,
+                        $std_op_3:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_4:expr,
+                        $std_op_4:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_5:expr,
+                        $std_op_5:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_6:expr,
+                        $std_op_6:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_7:expr,
+                        $std_op_7:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_8:expr,
+                        $std_op_8:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_9:expr,
+                        $std_op_9:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_10:expr,
+                        $std_op_10:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_11:expr,
+                        $std_op_11:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_12:expr,
+                        $std_op_12:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_13:expr,
+                        $std_op_13:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_14:expr,
+                        $std_op_14:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_15:expr,
+                        $std_op_15:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_16:expr,
+                        $std_op_16:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_17:expr,
+                        $std_op_17:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_18:expr,
+                        $std_op_18:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_19:expr,
+                        $std_op_19:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_20:expr,
+                        $std_op_20:expr
+                        $(,)?
+                    ),
+                    (
+                        $sat_op_21:expr,
+                        $std_op_21:expr
+                        $(,)?
+                    )
                     $(,)?
                 ]
             );*
@@ -525,48 +651,90 @@ macro_rules! impl_saturating_arithmetic {
                 $self,
                 $other,
                 [
-                    $sat_op_1,
-                    $std_op_1,
-                    $sat_op_2,
-                    $std_op_2,
-                    $sat_op_3,
-                    $std_op_3,
-                    $sat_op_4,
-                    $std_op_4,
-                    $sat_op_5,
-                    $std_op_5,
-                    $sat_op_6,
-                    $std_op_6,
-                    $sat_op_7,
-                    $std_op_7,
-                    $sat_op_8,
-                    $std_op_8,
-                    $sat_op_9,
-                    $std_op_9,
-                    $sat_op_10,
-                    $std_op_10,
-                    $sat_op_11,
-                    $std_op_11,
-                    $sat_op_12,
-                    $std_op_12,
-                    $sat_op_13,
-                    $std_op_13,
-                    $sat_op_14,
-                    $std_op_14,
-                    $sat_op_15,
-                    $std_op_15,
-                    $sat_op_16,
-                    $std_op_16,
-                    $sat_op_17,
-                    $std_op_17,
-                    $sat_op_18,
-                    $std_op_18,
-                    $sat_op_19,
-                    $std_op_19,
-                    $sat_op_20,
-                    $std_op_20,
-                    $sat_op_21,
-                    $std_op_21
+                    (
+                        $sat_op_1,
+                        $std_op_1
+                    ),
+                    (
+                        $sat_op_2,
+                        $std_op_2
+                    ),
+                    (
+                        $sat_op_3,
+                        $std_op_3
+                    ),
+                    (
+                        $sat_op_4,
+                        $std_op_4
+                    ),
+                    (
+                        $sat_op_5,
+                        $std_op_5
+                    ),
+                    (
+                        $sat_op_6,
+                        $std_op_6
+                    ),
+                    (
+                        $sat_op_7,
+                        $std_op_7
+                    ),
+                    (
+                        $sat_op_8,
+                        $std_op_8
+                    ),
+                    (
+                        $sat_op_9,
+                        $std_op_9
+                    ),
+                    (
+                        $sat_op_10,
+                        $std_op_10
+                    ),
+                    (
+                        $sat_op_11,
+                        $std_op_11
+                    ),
+                    (
+                        $sat_op_12,
+                        $std_op_12
+                    ),
+                    (
+                        $sat_op_13,
+                        $std_op_13
+                    ),
+                    (
+                        $sat_op_14,
+                        $std_op_14
+                    ),
+                    (
+                        $sat_op_15,
+                        $std_op_15
+                    ),
+                    (
+                        $sat_op_16,
+                        $std_op_16
+                    ),
+                    (
+                        $sat_op_17,
+                        $std_op_17
+                    ),
+                    (
+                        $sat_op_18,
+                        $std_op_18
+                    ),
+                    (
+                        $sat_op_19,
+                        $std_op_19
+                    ),
+                    (
+                        $sat_op_20,
+                        $std_op_20
+                    ),
+                    (
+                        $sat_op_21,
+                        $std_op_21
+                    )
                 ]
             );
         )+
@@ -587,48 +755,111 @@ macro_rules! impl_saturating_arithmetic {
         $self:ident,
         $other:ident,
         [
-            $sat_op_1:expr,
-            $std_op_1:expr,
-            $sat_op_2:expr,
-            $std_op_2:expr,
-            $sat_op_3:expr,
-            $std_op_3:expr,
-            $sat_op_4:expr,
-            $std_op_4:expr,
-            $sat_op_5:expr,
-            $std_op_5:expr,
-            $sat_op_6:expr,
-            $std_op_6:expr,
-            $sat_op_7:expr,
-            $std_op_7:expr,
-            $sat_op_8:expr,
-            $std_op_8:expr,
-            $sat_op_9:expr,
-            $std_op_9:expr,
-            $sat_op_10:expr,
-            $std_op_10:expr,
-            $sat_op_11:expr,
-            $std_op_11:expr,
-            $sat_op_12:expr,
-            $std_op_12:expr,
-            $sat_op_13:expr,
-            $std_op_13:expr,
-            $sat_op_14:expr,
-            $std_op_14:expr,
-            $sat_op_15:expr,
-            $std_op_15:expr,
-            $sat_op_16:expr,
-            $std_op_16:expr,
-            $sat_op_17:expr,
-            $std_op_17:expr,
-            $sat_op_18:expr,
-            $std_op_18:expr,
-            $sat_op_19:expr,
-            $std_op_19:expr,
-            $sat_op_20:expr,
-            $std_op_20:expr,
-            $sat_op_21:expr,
-            $std_op_21:expr
+            (
+                $sat_op_1:expr,
+                $std_op_1:expr
+                $(,)?
+            ),
+            (
+                $sat_op_2:expr,
+                $std_op_2:expr
+                $(,)?
+            ),
+            (
+                $sat_op_3:expr,
+                $std_op_3:expr
+                $(,)?
+            ),
+            (
+                $sat_op_4:expr,
+                $std_op_4:expr
+                $(,)?
+            ),
+            (
+                $sat_op_5:expr,
+                $std_op_5:expr
+                $(,)?
+            ),
+            (
+                $sat_op_6:expr,
+                $std_op_6:expr
+                $(,)?
+            ),
+            (
+                $sat_op_7:expr,
+                $std_op_7:expr
+                $(,)?
+            ),
+            (
+                $sat_op_8:expr,
+                $std_op_8:expr
+                $(,)?
+            ),
+            (
+                $sat_op_9:expr,
+                $std_op_9:expr
+                $(,)?
+            ),
+            (
+                $sat_op_10:expr,
+                $std_op_10:expr
+                $(,)?
+            ),
+            (
+                $sat_op_11:expr,
+                $std_op_11:expr
+                $(,)?
+            ),
+            (
+                $sat_op_12:expr,
+                $std_op_12:expr
+                $(,)?
+            ),
+            (
+                $sat_op_13:expr,
+                $std_op_13:expr
+                $(,)?
+            ),
+            (
+                $sat_op_14:expr,
+                $std_op_14:expr
+                $(,)?
+            ),
+            (
+                $sat_op_15:expr,
+                $std_op_15:expr
+                $(,)?
+            ),
+            (
+                $sat_op_16:expr,
+                $std_op_16:expr
+                $(,)?
+            ),
+            (
+                $sat_op_17:expr,
+                $std_op_17:expr
+                $(,)?
+            ),
+            (
+                $sat_op_18:expr,
+                $std_op_18:expr
+                $(,)?
+            ),
+            (
+                $sat_op_19:expr,
+                $std_op_19:expr
+                $(,)?
+            ),
+            (
+                $sat_op_20:expr,
+                $std_op_20:expr
+                $(,)?
+            ),
+            (
+                $sat_op_21:expr,
+                $std_op_21:expr
+                $(,)?
+            )
             $(,)?
         ]
     ) => {
@@ -639,48 +870,90 @@ macro_rules! impl_saturating_arithmetic {
                 $self,
                 $other,
                 [
-                    $sat_op_1,
-                    $std_op_1,
-                    $sat_op_2,
-                    $std_op_2,
-                    $sat_op_3,
-                    $std_op_3,
-                    $sat_op_4,
-                    $std_op_4,
-                    $sat_op_5,
-                    $std_op_5,
-                    $sat_op_6,
-                    $std_op_6,
-                    $sat_op_7,
-                    $std_op_7,
-                    $sat_op_8,
-                    $std_op_8,
-                    $sat_op_9,
-                    $std_op_9,
-                    $sat_op_10,
-                    $std_op_10,
-                    $sat_op_11,
-                    $std_op_11,
-                    $sat_op_12,
-                    $std_op_12,
-                    $sat_op_13,
-                    $std_op_13,
-                    $sat_op_14,
-                    $std_op_14,
-                    $sat_op_15,
-                    $std_op_15,
-                    $sat_op_16,
-                    $std_op_16,
-                    $sat_op_17,
-                    $std_op_17,
-                    $sat_op_18,
-                    $std_op_18,
-                    $sat_op_19,
-                    $std_op_19,
-                    $sat_op_20,
-                    $std_op_20,
-                    $sat_op_21,
-                    $std_op_21
+                    (
+                        $sat_op_1,
+                        $std_op_1
+                    ),
+                    (
+                        $sat_op_2,
+                        $std_op_2
+                    ),
+                    (
+                        $sat_op_3,
+                        $std_op_3
+                    ),
+                    (
+                        $sat_op_4,
+                        $std_op_4
+                    ),
+                    (
+                        $sat_op_5,
+                        $std_op_5
+                    ),
+                    (
+                        $sat_op_6,
+                        $std_op_6
+                    ),
+                    (
+                        $sat_op_7,
+                        $std_op_7
+                    ),
+                    (
+                        $sat_op_8,
+                        $std_op_8
+                    ),
+                    (
+                        $sat_op_9,
+                        $std_op_9
+                    ),
+                    (
+                        $sat_op_10,
+                        $std_op_10
+                    ),
+                    (
+                        $sat_op_11,
+                        $std_op_11
+                    ),
+                    (
+                        $sat_op_12,
+                        $std_op_12
+                    ),
+                    (
+                        $sat_op_13,
+                        $std_op_13
+                    ),
+                    (
+                        $sat_op_14,
+                        $std_op_14
+                    ),
+                    (
+                        $sat_op_15,
+                        $std_op_15
+                    ),
+                    (
+                        $sat_op_16,
+                        $std_op_16
+                    ),
+                    (
+                        $sat_op_17,
+                        $std_op_17
+                    ),
+                    (
+                        $sat_op_18,
+                        $std_op_18
+                    ),
+                    (
+                        $sat_op_19,
+                        $std_op_19
+                    ),
+                    (
+                        $sat_op_20,
+                        $std_op_20
+                    ),
+                    (
+                        $sat_op_21,
+                        $std_op_21
+                    )
                 ]
             );
         )+
@@ -708,53 +981,178 @@ impl_saturating_arithmetic!(
     s,
     rhs,
     [
-        s.saturating_add(rhs),
-        s + rhs,
-        s.saturating_sub(rhs),
-        s - rhs,
-        s.saturating_mul(rhs),
-        s * rhs,
-        s.saturating_div(rhs),
-        s / rhs,
-        s.saturating_rem(rhs),
-        s % rhs,
-        if s == isize::MIN {
-            isize::MAX
-        } else if s < 0 {
-            -s
-        } else {
+        (
+            s.saturating_add(rhs),
+            s + rhs
+        ),
+        (
+            s.saturating_sub(rhs),
+            s - rhs
+        ),
+        (
+            s.saturating_mul(rhs),
+            s * rhs
+        ),
+        (
+            s.saturating_div(rhs),
+            s / rhs
+        ),
+        (
+            s.saturating_rem(rhs),
+            s % rhs
+        ),
+        (
+            if s == isize::MIN {
+                isize::MAX
+            } else if s < 0 {
+                -s
+            } else {
+                s
+            },
             s
-        },
-        s,
-        *s = s.saturating_add(rhs),
-        *s = *s + rhs,
-        *s = s.saturating_sub(rhs),
-        *s = *s - rhs,
-        *s = s.saturating_mul(rhs),
-        *s = *s * rhs,
-        *s = s.saturating_div(rhs),
-        *s = *s / rhs,
-        *s = s.saturating_rem(rhs),
-        *s = *s % rhs,
-        s & rhs,
-        s & rhs,
-        s | rhs,
-        s | rhs,
-        s ^ rhs,
-        s ^ rhs,
-        *s = s.saturating_bitand_assign(rhs),
-        *s = *s & rhs,
-        *s = s.saturating_bitor_assign(rhs),
-        *s = *s | rhs,
-        *s = s.saturating_bitxor_assign(rhs),
-        *s = *s ^ rhs,
-        if rhs >= 8 { 0 } else { s << rhs },
-        if rhs >= 8 { 0 } else { s << rhs },
-        if rhs >= 8 { 0 } else { s >> rhs },
-        if rhs >= 8 { 0 } else { s >> rhs },
-        *s = if rhs >= 8 { 0 } else { *s << rhs },
-        *s = if rhs >= 8 { 0 } else { *s << rhs },
-        *s = if rhs >= 8 { 0 } else { *s >> rhs },
-        *s = if rhs >= 8 { 0 } else { *s >> rhs }
+        ),
+        (
+            *s = s.saturating_add(rhs),
+            *s = *s + rhs,
+        ),
+        (
+            *s = s.saturating_sub(rhs),
+            *s = *s - rhs,
+        ),
+        (
+            *s = s.saturating_mul(rhs),
+            *s = *s * rhs,
+        ),
+        (
+            *s = s.saturating_div(rhs),
+            *s = *s / rhs,
+        ),
+        (
+            *s = s.saturating_rem(rhs),
+            *s = *s % rhs,
+        ),
+        (
+            s & rhs,
+            s & rhs
+        ),
+        (
+            s | rhs,
+            s | rhs
+        ),
+        (
+            s ^ rhs,
+            s ^ rhs
+        ),
+        (
+            *s = s.saturating_bitand_assign(rhs),
+            *s = *s & rhs
+        ),
+        (
+            *s = s.saturating_bitor_assign(rhs),
+            *s = *s | rhs
+        ),
+        (
+            *s = s.saturating_bitxor_assign(rhs),
+            *s = *s ^ rhs
+        ),
+        (
+            if rhs >= Self::MAX { 0 } else { s << rhs },
+            if rhs >= Self::MAX { 0 } else { s << rhs }
+        ),
+        (
+            if rhs >= Self::MAX { 0 } else { s >> rhs },
+            if rhs >= Self::MAX { 0 } else { s >> rhs }
+        ),
+        (
+            *s = if rhs >= Self::MAX { 0 } else { *s << rhs },
+            *s = if rhs >= Self::MAX { 0 } else { *s << rhs }
+        ),
+        (
+            *s = if rhs >= Self::MAX { 0 } else { *s >> rhs },
+            *s = if rhs >= Self::MAX { 0 } else { *s >> rhs }
+        )
+    ]
+);
+
+impl_saturating_arithmetic!(
+    f32,
+    f32,
+    s,
+    rhs,
+    [
+        (s.saturating_add(rhs), s + rhs),
+        (s.saturating_sub(rhs), s - rhs),
+        (s.saturating_mul(rhs), s * rhs),
+        (s.saturating_div(rhs), s / rhs),
+        (s.saturating_rem(rhs), s % rhs),
+        (
+            if s == isize::MIN {
+                isize::MAX
+            } else if s < 0 {
+                -s
+            } else {
+                s
+            },
+            s
+        ),
+        (*s = s.saturating_add(rhs), *s = *s + rhs,),
+        (*s = s.saturating_sub(rhs), *s = *s - rhs,),
+        (*s = s.saturating_mul(rhs), *s = *s * rhs,),
+        (*s = s.saturating_div(rhs), *s = *s / rhs,),
+        (*s = s.saturating_rem(rhs), *s = *s % rhs,),
+        (s & rhs, s & rhs),
+        (s | rhs, s | rhs),
+        (s ^ rhs, s ^ rhs),
+        (*s = s.saturating_bitand_assign(rhs), *s = *s & rhs),
+        (*s = s.saturating_bitor_assign(rhs), *s = *s | rhs),
+        (*s = s.saturating_bitxor_assign(rhs), *s = *s ^ rhs),
+        (
+            if rhs >= Self::MAX {
+                0 as Self
+            } else {
+                s << rhs as u32
+            } as Self,
+            if rhs >= Self::MAX {
+                0 as Self
+            } else {
+                s << rhs as u32
+            } as Self
+        ),
+        (
+            if rhs >= Self::MAX {
+                0 as Self
+            } else {
+                s >> rhs as u32
+            } as Self,
+            if rhs >= Self::MAX {
+                0 as Self
+            } else {
+                s >> rhs as u32
+            } as Self
+        ),
+        (
+            *s = if rhs >= Self::MAX {
+                0 as Self
+            } else {
+                *s << rhs as u32
+            } as Self,
+            *s = if rhs >= Self::MAX {
+                0 as Self
+            } else {
+                *s << rhs as u32
+            } as Self
+        ),
+        (
+            *s = if rhs >= Self::MAX {
+                0 as Self
+            } else {
+                *s >> rhs as u32
+            } as Self,
+            *s = if rhs >= Self::MAX {
+                0 as Self
+            } else {
+                *s >> rhs as u32
+            } as Self
+        )
     ]
 );
