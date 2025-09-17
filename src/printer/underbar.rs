@@ -1,41 +1,5 @@
 use super::*;
 
-#[derive(Debug, Clone, derive_more::IntoIterator)]
-pub struct FormattedCaretSegment {
-    /// The main underbar line
-    underbar: TokenStream,
-    /// Separator line between caret lines including the V_CARETs
-    underbar_sep: TokenStream,
-    // (Main line, Separator line)
-    #[into_iterator]
-    caret_lines: Vec<CaretLine>,
-}
-impl FormattedCaretSegment {
-    pub(super) fn new(
-        underbar: TokenStream,
-        underbar_sep: TokenStream,
-        caret_lines: Vec<CaretLine>,
-    ) -> Self {
-        Self {
-            underbar,
-            underbar_sep,
-            caret_lines,
-        }
-    }
-    pub fn underbar(&self) -> [&TokenStream; 2] {
-        [&self.underbar, &self.underbar_sep]
-    }
-    pub fn underbar_lines(&self) -> LineTokenStream {
-        let mut line = LineTokenStream::new();
-        line.push_new(&self.underbar);
-        line.push_new(&self.underbar_sep);
-        line
-    }
-    pub fn caret_lines(&self) -> &[CaretLine] {
-        &self.caret_lines
-    }
-}
-
 impl Report {
     pub(super) fn generate_underbar(
         input_label_offset: usize,

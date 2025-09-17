@@ -72,19 +72,11 @@ crate::impl_field!(
     ReportCaret,start,usize;
     ReportCaret,end,usize;
     ReportCaret,r_positions,Vec<ReportLabel>;
-    UnderbarLine,underbar,TokenStream;
-    UnderbarLine,underbar_sep,TokenStream;
     CaretLine,main,TokenStream;
     ReportLabel,position,usize;
     ReportLabel,message,LineTokenStream;
     ReportLabel,child_labels,Vec<LineTokenStream>;
 );
-
-#[derive(Debug, Clone)]
-pub struct UnderbarLine {
-    underbar: TokenStream,
-    underbar_sep: TokenStream,
-}
 
 #[derive(Debug, Clone, derive_more::Into, derive_more::From)]
 pub struct CaretLine {
@@ -116,9 +108,11 @@ pub(self) struct Lines {
     lines: Vec<Line>,
 }
 impl Lines {
+    #[allow(dead_code)]
     pub fn to_inner<'a>(&'a self) -> impl Iterator<Item = TokenStream> {
         self.lines.iter().map(|l| l.clone().into_inner())
     }
+    #[allow(dead_code)]
     pub fn into_inner(self) -> impl Iterator<Item = TokenStream> {
         self.lines.into_iter().map(|l| l.into_inner())
     }
@@ -132,10 +126,12 @@ impl Lines {
         self.lines.push(line.into());
         self
     }
+    #[allow(dead_code)]
     pub fn extend<I: Into<Line>>(&mut self, lines: impl IntoIterator<Item = I>) -> &mut Self {
         self.lines.extend(lines.into_iter().map(Into::into));
         self
     }
+    #[allow(dead_code)]
     pub fn extend_clone<I: AsRef<Line>>(
         &mut self,
         lines: impl IntoIterator<Item = I>,
@@ -177,16 +173,6 @@ impl Display for Lines {
             until_last.try_for_each(|line| write!(f, "{line:#}"))?;
             write!(f, "{last}")
         }
-
-        /* self.iter().enumerate().try_for_each(|(i, line)| {
-            if i == total {
-                // Dont print a new line at the end
-                write!(f, "{line} - nnl")
-            } else {
-                // Pretty print, as "Line" implements alternate formatting which adds a new line
-                write!(f, "{line:#}")
-            }
-        }) */
     }
 }
 

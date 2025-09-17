@@ -1,6 +1,5 @@
 #![feature(iter_array_chunks)]
-#![allow(dead_code)]
-#![deny(unused)]
+#![deny(dead_code, unused)]
 
 use ::itertools::Itertools;
 use ::misc_extensions::bool::*;

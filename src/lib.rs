@@ -1,10 +1,9 @@
 #![feature(trivial_bounds)]
-#![deny(unused)]
-#![allow(dead_code)]
+#![deny(dead_code, unused)]
 
 mod builder;
 mod printer;
-pub use builder::{ReportBuilder, ChildLabel, IntoRange, Label, RangeInclusive, Error};
+pub use builder::{ChildLabel, Error, IntoRange, Label, RangeInclusive, ReportBuilder};
 use printer::*;
 mod find_iter;
 pub use ::token::{AnsiStyle, Color, RgbColor, Style};

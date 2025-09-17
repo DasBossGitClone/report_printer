@@ -231,6 +231,7 @@ impl Label {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_message(&self) -> String {
         let Self { message, color, .. } = self;
         let message = message.clone();
@@ -241,6 +242,8 @@ impl Label {
             message
         }
     }
+
+    #[allow(dead_code)]
     pub(crate) fn into_message(self) -> String {
         let Self { message, color, .. } = self;
         if let Some(color) = color {
@@ -277,6 +280,7 @@ impl ChildLabel {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_message(&self) -> String {
         let Self { message, color } = self;
         let message = message.clone();
@@ -287,6 +291,8 @@ impl ChildLabel {
             message
         }
     }
+
+    #[allow(dead_code)]
     pub(crate) fn into_message(self) -> String {
         let Self { message, color } = self;
         if let Some(color) = color {

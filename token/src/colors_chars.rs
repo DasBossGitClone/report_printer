@@ -1,3 +1,5 @@
+#![deny(dead_code, unused)]
+
 use ::std::{fmt::Display, str::FromStr};
 
 pub use misc_extensions::consts::colors::{
