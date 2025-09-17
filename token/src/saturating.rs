@@ -124,6 +124,7 @@ macro_rules! impl_saturating_arithmetic {
         $(,)?
     ]) => {
         impl SaturatingArithmetic<$other_ty> for $self_ty {
+            #[inline(always)]
             fn sat_add(self, rhs: $other_ty) -> $self_ty
             where
                 Self: Add<$self_ty, Output = $self_ty>,
@@ -139,6 +140,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_1
                 }
             }
+            #[inline(always)]
             fn sat_sub(self, rhs: $other_ty) -> $self_ty
             where
                 Self: Sub<$self_ty, Output = $self_ty>,
@@ -154,6 +156,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_2
                 }
             }
+            #[inline(always)]
             fn sat_mul(self, rhs: $other_ty) -> $self_ty
             where
                 Self: Mul<$self_ty, Output = $self_ty>,
@@ -169,6 +172,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_3
                 }
             }
+            #[inline(always)]
             fn sat_div(self, rhs: $other_ty) -> $self_ty
             where
                 Self: Div<$self_ty, Output = $self_ty>,
@@ -184,6 +188,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_4
                 }
             }
+            #[inline(always)]
             fn sat_rem(self, rhs: $other_ty) -> $self_ty
             where
                 Self: Rem<$self_ty, Output = $self_ty>,
@@ -199,6 +204,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_5
                 }
             }
+            #[inline(always)]
             fn sat_abs(self) -> $self_ty
             where
                 Self: Sized + PartialOrd + Neg<Output = $self_ty> + Copy,
@@ -213,6 +219,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_6
                 }
             }
+            #[inline(always)]
             fn sat_add_assign(&mut self, rhs: $other_ty)
             where
                 Self: Add<$self_ty, Output = $self_ty>,
@@ -228,6 +235,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_7
                 }
             }
+            #[inline(always)]
             fn sat_sub_assign(&mut self, rhs: $other_ty)
             where
                 Self: Sub<$self_ty, Output = $self_ty>,
@@ -243,6 +251,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_8
                 }
             }
+            #[inline(always)]
             fn sat_mul_assign(&mut self, rhs: $other_ty)
             where
                 Self: Mul<$self_ty, Output = $self_ty>,
@@ -258,6 +267,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_9
                 }
             }
+            #[inline(always)]
             fn sat_div_assign(&mut self, rhs: $other_ty)
             where
                 Self: Div<$self_ty, Output = $self_ty>,
@@ -273,6 +283,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_10
                 }
             }
+            #[inline(always)]
             fn sat_rem_assign(&mut self, rhs: $other_ty)
             where
                 Self: Rem<$self_ty, Output = $self_ty>,
@@ -288,6 +299,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_11
                 }
             }
+            #[inline(always)]
             fn sat_bitand(self, rhs: $other_ty) -> $self_ty
             where
                 Self: Sized + BitAnd<$self_ty, Output = $self_ty>,
@@ -303,6 +315,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_12
                 }
             }
+            #[inline(always)]
             fn sat_bitor(self, rhs: $other_ty) -> $self_ty
             where
                 Self: Sized + BitOr<$self_ty, Output = $self_ty>,
@@ -318,6 +331,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_13
                 }
             }
+            #[inline(always)]
             fn sat_bitxor(self, rhs: $other_ty) -> $self_ty
             where
                 Self: Sized + BitXor<$self_ty, Output = $self_ty>,
@@ -333,6 +347,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_14
                 }
             }
+            #[inline(always)]
             fn sat_bitand_assign(&mut self, rhs: $other_ty)
             where
                 Self: BitAnd<$self_ty, Output = $self_ty>,
@@ -348,6 +363,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_15
                 }
             }
+            #[inline(always)]
             fn sat_bitor_assign(&mut self, rhs: $other_ty)
             where
                 Self: BitOr<$self_ty, Output = $self_ty>,
@@ -363,6 +379,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_16
                 }
             }
+            #[inline(always)]
             fn sat_bitxor_assign(&mut self, rhs: $other_ty)
             where
                 Self: BitXor<$self_ty, Output = $self_ty>,
@@ -378,6 +395,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_17
                 }
             }
+            #[inline(always)]
             fn sat_shl(self, rhs: u32) -> $self_ty
             where
                 Self: Sized + Shl<u32, Output = $self_ty>,
@@ -393,6 +411,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_18
                 }
             }
+            #[inline(always)]
             fn sat_shr(self, rhs: u32) -> $self_ty
             where
                 Self: Sized + Shr<u32, Output = $self_ty>,
@@ -408,6 +427,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_19
                 }
             }
+            #[inline(always)]
             fn sat_shl_assign(&mut self, rhs: u32)
             where
                 Self: Shl<u32, Output = $self_ty>,
@@ -423,6 +443,7 @@ macro_rules! impl_saturating_arithmetic {
                     $std_op_20
                 }
             }
+            #[inline(always)]
             fn sat_shr_assign(&mut self, rhs: u32)
             where
                 Self: Shr<u32, Output = $self_ty>,
