@@ -1,7 +1,7 @@
 use ::std::fmt::Display;
 #[cfg(feature = "caret_color")]
 use ::token::RgbColor;
-use ::token::{AnsiStyle, LineTokenStream};
+use ::token::{AnsiStyle, LineTokenStream, saturating::SaturatingArithmetic};
 
 use crate::{Report, TokenizedChildLabel, TokenizedLabelFull};
 
@@ -89,7 +89,7 @@ impl RangeInclusive {
     }
 
     pub fn len(&self) -> usize {
-        self.end.saturating_sub(self.start).saturating_add(1)
+        self.end.saturating_sub(self.start).sat_add(1)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -481,7 +481,6 @@ impl ReportBuilder {
                 )
             })
             .collect::<Vec<_>>();
-
         Ok(Report::new(
             input,
             input_label_offset,
@@ -489,4 +488,27 @@ impl ReportBuilder {
             labels,
         ))
     }
+}
+
+#[test]
+#[allow(unused)]
+fn tokensrcmultilinestreamrs223a2ae17e7e4d239ec9c66cf1cdf40a() {
+    let message = "Third Label";
+    let stream = LineTokenStream::from_str_with_length(message, 30);
+    dbg!(stream);
+}
+
+#[test]
+#[allow(unused)]
+fn srcbuilderrs466a325e875e424bbbc4474ff8735c3a() {
+    let mut stream = ::token::TokenStream::new();
+    let token = ::token::Token::Styled(
+        AnsiStyle::RED,
+        Some(Box::new(::token::Token::Literal("Hello".into()))),
+    );
+    stream.push(token);
+    let token = ::token::Token::Styled(AnsiStyle::RESET, None);
+    stream.push(token);
+    dbg!(&stream);
+    dbg!(format!("{:#}", stream));
 }

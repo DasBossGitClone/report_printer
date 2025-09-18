@@ -1,4 +1,4 @@
-#![feature(iter_array_chunks, trivial_bounds)]
+#![feature(iter_array_chunks, trivial_bounds, box_patterns, formatting_options)]
 #![deny(dead_code, unused)]
 
 use ::itertools::Itertools;
@@ -12,8 +12,8 @@ mod colors_chars;
 pub use colors_chars::*;
 mod token;
 pub use token::*;
-mod single_line_stream;
-pub use single_line_stream::*;
+mod token_stream;
+pub use token_stream::*;
 mod multiline_stream;
 pub use multiline_stream::*;
 pub mod saturating;

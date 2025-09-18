@@ -1,3 +1,5 @@
+use crate::saturating::SaturatingArithmetic;
+
 use super::*;
 
 #[derive(Clone, PartialEq, Eq, Hash, derive_more::Into)]
@@ -9,21 +11,31 @@ pub struct LineTokenStream {
 }
 impl Debug for LineTokenStream {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if f.alternate() {
-            // Pretty print
-            f.debug_struct("LineTokenStream")
-                .field("total_lines", &self.tokens.len())
-                .field(
-                    "lines",
-                    &self
-                        .tokens
-                        .iter()
-                        .map(|line| format!("{:#}\n", line))
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                )
-                .finish()
-        } else {
+        #[cfg(feature = "alt_debug")]
+        {
+            if f.alternate() {
+                // Pretty print
+                f.debug_struct("LineTokenStream")
+                    .field("total_lines", &self.tokens.len())
+                    .field(
+                        "lines",
+                        &self
+                            .tokens
+                            .iter()
+                            .map(|line| format!("{:#}\n", line))
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    )
+                    .finish()
+            } else {
+                // Default debug implementation
+                f.debug_struct("LineTokenStream")
+                    .field("tokens", &self.tokens)
+                    .finish()
+            }
+        }
+        #[cfg(not(feature = "alt_debug"))]
+        {
             // Default debug implementation
             f.debug_struct("LineTokenStream")
                 .field("tokens", &self.tokens)
@@ -34,12 +46,9 @@ impl Debug for LineTokenStream {
 
 impl Display for LineTokenStream {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.tokens.iter().try_for_each(|line| {
-            line.as_ref()
-                .iter()
-                .try_for_each(|token| write!(f, "{}", token))?;
-            writeln!(f)
-        })?;
+        self.tokens
+            .iter()
+            .try_for_each(|line| Display::fmt(line, f))?;
         Ok(())
     }
 }
@@ -101,8 +110,8 @@ impl LineTokenStream {
         self.tokens.len()
     }
     #[inline]
-    pub fn iter(&self) -> std::slice::Iter<'_, TokenStream> {
-        self.tokens.iter()
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = TokenStreamLine> {
+        TokenStreamLineIntoIter::new(self.clone()).into_iter()
     }
     #[inline]
     pub fn last(&self) -> Option<&TokenStream> {
@@ -178,11 +187,11 @@ impl LineTokenStream {
                 while line.len() > max_line_length {
                     let break_at = line[..max_line_length]
                         .rfind(char::is_whitespace)
-                        .unwrap_or(max_line_length - 1);
+                        .unwrap_or(max_line_length.sat_sub(1));
                     // Check if we can break within range
                     if break_at > max_line_length {
                         // We need to break with a hyphen
-                        let (part, rem) = line.split_at(max_line_length - 1);
+                        let (part, rem) = line.split_at(max_line_length.sat_sub(1));
                         let rem = rem.trim_start().to_string();
                         // Add a hyphen to the part
                         let mut part = part.to_string();
@@ -263,6 +272,7 @@ impl LineTokenStream {
         stream
     }
 }
+
 impl<I: Into<TokenStream>> From<I> for LineTokenStream {
     fn from(value: I) -> Self {
         Self {
@@ -370,12 +380,45 @@ impl Iterator for TokenStreamLineIntoIter {
             item = self.stream.tokens[self.index].clone();
         }
         let is_first = self.index == 0;
-        let is_last = self.index == self.stream.len() - 1;
+        let is_last = self.index == self.stream.len().sat_sub(1);
         let is_only = is_first && is_last;
         let lines = self.stream.len();
         let index = self.index;
 
         self.index += 1;
+        Some(TokenStreamLine {
+            index,
+            is_first,
+            is_last,
+            is_only,
+            lines,
+            line: item,
+        })
+    }
+}
+
+impl DoubleEndedIterator for TokenStreamLineIntoIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index == 0 {
+            return None;
+        }
+        self.index -= 1;
+        let mut item = self.stream.tokens[self.index].clone();
+        // Ensure we skip empty lines,
+        // although they should not be present
+        while item.is_empty() {
+            if self.index == 0 {
+                return None;
+            }
+            self.index -= 1;
+            item = self.stream.tokens[self.index].clone();
+        }
+        let is_first = self.index == 0;
+        let is_last = self.index == self.stream.len().sat_sub(1);
+        let is_only = is_first && is_last;
+        let lines = self.stream.len();
+        let index = self.index;
+
         Some(TokenStreamLine {
             index,
             is_first,

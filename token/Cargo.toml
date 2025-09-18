@@ -29,4 +29,6 @@
     proc-macro = false
 
 [features]
+    alt_debug             = ["merging_tokens"]
+    merging_tokens        = []
     saturating_arithmetic = []

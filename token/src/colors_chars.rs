@@ -16,12 +16,15 @@ pub use misc_extensions::consts::colors::{
     STYLE_RESET, UNDERLINE, UNDERLINE_RESET, WHITE, YELLOW,
 };
 
+use crate::saturating::SaturatingArithmetic;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum AnsiStyle {
     Color(Color),
     Style(Style),
     RgbColor(RgbColor),
+    Reset(Resets),
 }
 impl AnsiStyle {
     pub const BLACK: Self = Self::Color(Color::BLACK);
@@ -48,12 +51,16 @@ impl AnsiStyle {
     pub const INVERSE: Self = Self::Style(Style::INVERSE);
     pub const HIDDEN: Self = Self::Style(Style::HIDDEN);
     pub const STRIKETHROUGH: Self = Self::Style(Style::STRIKETHROUGH);
+    pub const RESET: Self = Self::Reset(Resets::All);
+    pub const RESET_COLOR: Self = Self::Reset(Resets::Color);
+    pub const RESET_STYLE: Self = Self::Reset(Resets::Style);
 
     pub fn to_ansi_escape_sequence(&self) -> String {
         match self {
             AnsiStyle::RgbColor(rgb) => rgb.to_string(),
             AnsiStyle::Color(color) => color.to_string(),
             AnsiStyle::Style(style) => style.to_string(),
+            AnsiStyle::Reset(reset) => reset.to_string(),
         }
     }
 
@@ -62,19 +69,10 @@ impl AnsiStyle {
             Some(AnsiStyle::Color(color))
         } else if let Some(rgb) = RgbColor::from_ansi_code(code) {
             Some(AnsiStyle::RgbColor(rgb))
+        } else if let Some(reset) = Resets::from_ansi_code(code) {
+            Some(AnsiStyle::Reset(reset))
         } else {
-            match code {
-                0 => Some(AnsiStyle::Style(Style::RESET)),
-                1 => Some(AnsiStyle::Style(Style::BOLD)),
-                2 => Some(AnsiStyle::Style(Style::DIM)),
-                3 => Some(AnsiStyle::Style(Style::ITALIC)),
-                4 => Some(AnsiStyle::Style(Style::UNDERLINE)),
-                5 => Some(AnsiStyle::Style(Style::BLINK)),
-                7 => Some(AnsiStyle::Style(Style::INVERSE)),
-                8 => Some(AnsiStyle::Style(Style::HIDDEN)),
-                9 => Some(AnsiStyle::Style(Style::STRIKETHROUGH)),
-                _ => None,
-            }
+            Style::from_ansi_code(code).map(AnsiStyle::Style)
         }
     }
 
@@ -99,19 +97,21 @@ impl AnsiStyle {
             let (code_str, rest) = input.split_at(pos);
             if let Ok(code) = code_str.parse::<u8>() {
                 if let Some(style) = AnsiStyle::from_ansi_code(code) {
-                    return Ok((style, Some(rest[1..].to_string()))); // +1 to skip the 'm'
+                    // +1 to skip the 'm'
+                    return Ok((style, Some(rest[1..].to_string())));
                 }
             } else if let Some(pos) = code_str.find("38;2;") {
-                let rgb_part = &code_str[pos + 5..]; // Skip "38;2;"
+                let rgb_part = &code_str[pos.sat_add(5)..]; // Skip "38;2;"
                 let mut parts = rgb_part.split(';');
                 if let (Some(r), Some(g), Some(b)) = (parts.next(), parts.next(), parts.next()) {
                     if let (Ok(r), Ok(g), Ok(b)) =
                         (r.parse::<u8>(), g.parse::<u8>(), b.parse::<u8>())
                     {
+                        // +1 to skip the 'm'
                         return Ok((
                             AnsiStyle::RgbColor(RgbColor::new(r, g, b)),
-                            Some(rest[code_str.len() + 1..].to_string()),
-                        )); // +1 to skip the 'm'
+                            Some(rest[code_str.len().sat_add(1)..].to_string()),
+                        ));
                     }
                 }
             }
@@ -173,7 +173,6 @@ impl Display for AnsiStyle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Style {
-    Reset = 0,
     Bold = 1,
     Dim = 2,
     Italic = 3,
@@ -184,7 +183,6 @@ pub enum Style {
     Strikethrough = 9,
 }
 impl Style {
-    pub const RESET: Self = Self::Reset;
     pub const BOLD: Self = Self::Bold;
     pub const DIM: Self = Self::Dim;
     pub const ITALIC: Self = Self::Italic;
@@ -193,11 +191,24 @@ impl Style {
     pub const INVERSE: Self = Self::Inverse;
     pub const HIDDEN: Self = Self::Hidden;
     pub const STRIKETHROUGH: Self = Self::Strikethrough;
+
+    pub fn from_ansi_code(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(Self::Bold),
+            2 => Some(Self::Dim),
+            3 => Some(Self::Italic),
+            4 => Some(Self::Underline),
+            5 => Some(Self::Blink),
+            7 => Some(Self::Inverse),
+            8 => Some(Self::Hidden),
+            9 => Some(Self::Strikethrough),
+            _ => None,
+        }
+    }
 }
 impl Display for Style {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Style::Reset => write!(f, "{}", STYLE_RESET),
             Style::Bold => write!(f, "{}", BOLD),
             Style::Dim => write!(f, "{}", DIM),
             Style::Italic => write!(f, "{}", ITALIC),
@@ -279,6 +290,12 @@ impl Color {
             97 => Self::new(ColorPalette::White, true),
             _ => return None,
         })
+    }
+    pub fn into_inner(self) -> (ColorPalette, bool) {
+        (self.color, self.bright)
+    }
+    pub fn as_inner(&self) -> &(ColorPalette, bool) {
+        unsafe { &*(self as *const Color as *const (ColorPalette, bool)) }
     }
 }
 impl Display for Color {
@@ -430,18 +447,111 @@ impl TryFrom<AnsiStyle> for RgbColor {
         match value {
             AnsiStyle::RgbColor(rgb) => Ok(rgb),
             AnsiStyle::Color(color) => Ok(RgbColor::from(color)),
-            AnsiStyle::Style(_) => Err(()),
+            _ => Err(()),
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum Resets {
+    All = 0,
+    Style = 1,
+    Color,
+    BgColor,
+    FgColor,
+    Bold,
+    Dim,
+    Italic,
+    Underline,
+    Blink,
+    Inverse,
+    Hidden,
+    Strikethrough,
+}
+impl Resets {
+    pub const RESET: Self = Self::All;
+    pub const STYLE: Self = Self::Style;
+    pub const COLOR: Self = Self::Color;
+    pub const BG_COLOR: Self = Self::BgColor;
+    pub const FG_COLOR: Self = Self::FgColor;
+    pub const BOLD: Self = Self::Bold;
+    pub const DIM: Self = Self::Dim;
+    pub const ITALIC: Self = Self::Italic;
+    pub const UNDERLINE: Self = Self::Underline;
+    pub const BLINK: Self = Self::Blink;
+    pub const INVERSE: Self = Self::Inverse;
+    pub const HIDDEN: Self = Self::Hidden;
+    pub const STRIKETHROUGH: Self = Self::Strikethrough;
+
+    pub fn to_ansi_escape_sequence(&self) -> &'static str {
+        match self {
+            Resets::All => RESET,
+            Resets::Style => STYLE_RESET,
+            Resets::Color => COLOR_RESET,
+            Resets::BgColor => BG_RESET,
+            Resets::FgColor => FG_RESET,
+            Resets::Bold => BOLD_RESET,
+            Resets::Dim => DIM_RESET,
+            Resets::Italic => ITALIC_RESET,
+            Resets::Underline => UNDERLINE_RESET,
+            Resets::Blink => BLINK_RESET,
+            Resets::Inverse => INVERSE_RESET,
+            Resets::Hidden => HIDDEN_RESET,
+            Resets::Strikethrough => STRIKETHROUGH_RESET,
+        }
+    }
+
+    pub fn with_reset<D: Display>(&self, s: D) -> String {
+        format!("{}{}{}", self.to_ansi_escape_sequence(), s, RESET)
+    }
+
+    pub fn from_ansi_code(code: u8) -> Option<Self> {
+        match code {
+            0 => Some(Resets::All),
+            20 => Some(Resets::Bold),
+            21 => Some(Resets::Dim),
+            23 => Some(Resets::Italic),
+            24 => Some(Resets::Underline),
+            25 => Some(Resets::Blink),
+            27 => Some(Resets::Inverse),
+            28 => Some(Resets::Hidden),
+            29 => Some(Resets::Strikethrough),
+            39 => Some(Resets::FgColor),
+            49 => Some(Resets::BgColor),
+            _ => None,
+        }
+    }
+}
+
+impl Display for Resets {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_ansi_escape_sequence())
+    }
+}
+
+impl AsRef<Resets> for Resets {
+    fn as_ref(&self) -> &Resets {
+        self
+    }
+}
+impl From<Resets> for AnsiStyle {
+    fn from(value: Resets) -> Self {
+        AnsiStyle::Reset(value)
+    }
+}
+
 pub fn colors() -> impl Iterator<Item = RgbColor> {
+    use super::saturating::SaturatingArithmetic;
     // VIP SECTION: Color generation
     // Just a placeholder for debugging purposes
     fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
-        let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
-        let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
-        let m = l - c / 2.0;
+        let c = (1.0.sat_sub(2.0.sat_mul(l).sat_sub(1.0)).abs()).sat_mul(s);
+        let x = c.sat_mul(
+            1.0.sat_sub((h.sat_div(60.0)).sat_rem(2.0).sat_sub(1.0))
+                .abs(),
+        );
+        let m = l.sat_sub(c.sat_div(2.0));
 
         let (r1, g1, b1) = if (0.0..60.0).contains(&h) {
             (c, x, 0.0)
@@ -458,21 +568,21 @@ pub fn colors() -> impl Iterator<Item = RgbColor> {
         };
 
         (
-            ((r1 + m) * 255.0).round() as u8,
-            ((g1 + m) * 255.0).round() as u8,
-            ((b1 + m) * 255.0).round() as u8,
+            ((r1.sat_add(m)).sat_mul(255.0)).round() as u8,
+            ((g1.sat_add(m)).sat_mul(255.0)).round() as u8,
+            ((b1.sat_add(m)).sat_mul(255.0)).round() as u8,
         )
     }
 
-    let rand_start = std::time::SystemTime::now()
+    let rand_start = (std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
-        .as_nanos() as u64
-        % 360;
+        .as_nanos() as u64)
+        .sat_rem(360);
 
     // Generate distinct colors for each label if not set
     (rand_start..).map(|i| {
-        let hue = (i as f32 * 137.508) % 360.0; // use golden angle approximation
+        let hue = ((i as f32).sat_mul(137.508)).sat_rem(360.0); // use golden angle approximation
         let (r, g, b) = hsl_to_rgb(hue, 0.5, 0.5);
         RgbColor::new(r, g, b)
     })

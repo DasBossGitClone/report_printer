@@ -171,6 +171,92 @@ fn overlapping_labels_with_color_and_caret_color() {
     print!("{}", String::from_utf8_lossy(&output));
 }
 
+#[cfg(not(feature = "merge_overlap"))]
+fn directly_overlaping_labels() {
+    let mut report = ReportBuilder::new("Test input for directly overlapping labels");
+    let label = Label::new(5..=20, "First label")
+        .with_color(AnsiStyle::GREEN)
+        .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
+        .with_child_label(ChildLabel::new("Child label B"));
+    report.push(label);
+    let label = Label::new(5..=20, "Second label")
+        .with_color(AnsiStyle::YELLOW)
+        .with_child_label(ChildLabel::new("Child label X").with_color(AnsiStyle::BLUE))
+        .with_child_label(ChildLabel::new("Child label Y"));
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
+#[cfg(feature = "merge_overlap")]
+fn directly_overlaping_labels_merged() {
+    let mut report = ReportBuilder::new("Test input for directly overlapping labels");
+    let label = Label::new(5..=20, "First label")
+        .with_color(AnsiStyle::GREEN)
+        .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
+        .with_child_label(ChildLabel::new("Child label B"));
+    report.push(label);
+    let label = Label::new(5..=20, "Second label")
+        .with_color(AnsiStyle::YELLOW)
+        .with_child_label(ChildLabel::new("Child label X").with_color(AnsiStyle::BLUE))
+        .with_child_label(ChildLabel::new("Child label Y"));
+    report.push(label);
+    let label = Label::new(5..=20, "Third label")
+        .with_color(AnsiStyle::CYAN)
+        .with_child_label(ChildLabel::new("Child label 1").with_color(AnsiStyle::MAGENTA))
+        .with_child_label(ChildLabel::new("Child label 2").with_color(AnsiStyle::WHITE));
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+#[cfg(all(feature = "merge_overlap", feature = "caret_color"))]
+fn directly_overlaping_labels_merged_with_caret_color() {
+    use ::token::RgbColor;
+    let mut report = ReportBuilder::new("Test input for directly overlapping labels").caret_color();
+    let label = Label::new(5..=20, "First label")
+        .with_caret_color(RgbColor::BRIGHT_GREEN)
+        .with_color(AnsiStyle::GREEN)
+        .with_child_label(
+            ChildLabel::new("Child label A")
+                .with_color(AnsiStyle::RED)
+                .with_caret_color(RgbColor::BRIGHT_RED),
+        )
+        .with_child_label(ChildLabel::new("Child label B").with_caret_color(RgbColor::CYAN));
+    report.push(label);
+    let label = Label::new(5..=20, "Second label")
+        .with_caret_color(RgbColor::BRIGHT_YELLOW)
+        .with_color(AnsiStyle::YELLOW)
+        .with_child_label(
+            ChildLabel::new("Child label X")
+                .with_color(AnsiStyle::BLUE)
+                .with_caret_color(RgbColor::BRIGHT_BLUE),
+        )
+        .with_child_label(ChildLabel::new("Child label Y"));
+    report.push(label);
+    let label = Label::new(5..=20, "Third label")
+        .with_caret_color(RgbColor::BRIGHT_CYAN)
+        .with_color(AnsiStyle::CYAN)
+        .with_child_label(
+            ChildLabel::new("Child label 1")
+                .with_color(AnsiStyle::MAGENTA)
+                .with_caret_color(RgbColor::MAGENTA),
+        )
+        .with_child_label(
+            ChildLabel::new("Child label 2")
+                .with_color(AnsiStyle::WHITE)
+                .with_caret_color(RgbColor::WHITE),
+        );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
 fn main() {
     single_line();
     println!("----------------------------------------");
@@ -182,16 +268,33 @@ fn main() {
     println!("----------------------------------------");
     write_iter();
     println!("----------------------------------------");
-    no_labels();
-    out_of_bounds();
-    empty_input();
-    empty_label_message();
-    empty_child_label_message();
+    {
+        // Functions with not outputs, we dont wanna print a separator for these
+        no_labels();
+        out_of_bounds();
+        empty_input();
+        empty_label_message();
+        empty_child_label_message();
+    }
     #[cfg(feature = "caret_color")]
     {
         println!("----------------------------------------");
         single_label_with_color_and_caret_color();
         println!("----------------------------------------");
         overlapping_labels_with_color_and_caret_color();
+        println!("----------------------------------------");
+    }
+    #[cfg(feature = "merge_overlap")]
+    {
+        directly_overlaping_labels_merged();
+    }
+    #[cfg(not(feature = "merge_overlap"))]
+    {
+        directly_overlaping_labels();
+    }
+    #[cfg(all(feature = "merge_overlap", feature = "caret_color"))]
+    {
+        println!("----------------------------------------");
+        directly_overlaping_labels_merged_with_caret_color();
     }
 }

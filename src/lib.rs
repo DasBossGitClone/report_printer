@@ -4,7 +4,13 @@
 mod builder;
 mod printer;
 use printer::*;
-mod find_iter;
+/// A module for finding patterns in text
+///
+/// Provides a forward and backward iterator for finding substrings
+/// in a given text.
+///
+/// Its just exported here, as it'd be a shame to have it, but not use it.
+pub mod find_iter;
 pub(crate) use find_iter::*;
 
 pub use ::token::{AnsiStyle, Color, RgbColor, Style, impl_field};

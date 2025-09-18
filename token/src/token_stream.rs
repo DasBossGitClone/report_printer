@@ -1,9 +1,52 @@
 use super::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, derive_more::Into, derive_more::IntoIterator)]
+#[derive(Clone, PartialEq, Eq, Hash, derive_more::Into, derive_more::IntoIterator)]
 pub struct TokenStream {
     pub tokens: Vec<Token>,
 }
+
+impl Debug for TokenStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[cfg(feature = "alt_debug")]
+        {
+            if f.alternate() {
+                // Pretty print
+                write!(f, "TokenStream [\n")?;
+                let mut stream: String = String::new();
+                if self.tokens.is_empty() {
+                    write!(f, "<empty>")?;
+                    return Ok(());
+                }
+                let mut last = self.tokens.first().unwrap();
+                stream.push_str(&format!("{last:#}"));
+                for token in self.tokens.iter().skip(1) {
+                    stream.push_str(&token.format_context(last, true));
+                    last = token;
+                }
+                write!(f, "{stream:#?}")?;
+                write!(
+                    f,
+                    "\n] {{literal len: {}, len: {}}}",
+                    self.lit_len(),
+                    self.len()
+                )
+            } else {
+                // Default debug implementation
+                f.debug_struct("TokenStream")
+                    .field("tokens", &self.tokens)
+                    .finish()
+            }
+        }
+        #[cfg(not(feature = "alt_debug"))]
+        {
+            // Default debug implementation
+            f.debug_struct("TokenStream")
+                .field("tokens", &self.tokens)
+                .finish()
+        }
+    }
+}
+
 impl TokenStream {
     delegate::delegate! {
         to self.tokens {
@@ -131,10 +174,8 @@ impl AsMut<[Token]> for TokenStream {
 }
 impl Display for TokenStream {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for token in &self.tokens {
-            write!(f, "{}", token)?;
-        }
-        Ok(())
+        let tokenbuffer = TokenBuffer::new(&self.tokens);
+        tokenbuffer.fmt(f)
     }
 }
 
@@ -174,8 +215,32 @@ impl<'a> TokenBuffer<'a> {
 }
 impl<'a> Display for TokenBuffer<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for token in self.buffer {
-            write!(f, "{}", token)?;
+        if self.buffer.is_empty() {
+            return Ok(());
+        }
+        #[cfg(feature = "merging_tokens")]
+        {
+            // We know its not empty, so unwrap is safe
+            let mut prev_token = self.buffer.first().unwrap();
+            if f.alternate() {
+                write!(f, "{prev_token:#}")?;
+            } else {
+                write!(f, "{prev_token}")?;
+            }
+            for token in self.buffer.iter().skip(1) {
+                token.fmt_context(prev_token, f)?;
+                prev_token = token;
+            }
+        }
+        #[cfg(not(feature = "merging_tokens"))]
+        {
+            for token in self.buffer {
+                if f.alternate() {
+                    write!(f, "{token:#}")?;
+                } else {
+                    write!(f, "{token}")?;
+                }
+            }
         }
         Ok(())
     }

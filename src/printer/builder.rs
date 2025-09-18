@@ -1,5 +1,7 @@
 use ::std::str::FromStr;
 
+use ::token::saturating::SaturatingArithmetic;
+
 use super::*;
 /// The final report that can be printed to the user
 /// Contained labels are printed each on their own
@@ -50,13 +52,13 @@ impl Report {
         let min_start_padded = input[..min_start]
             .find_rev_iter(" ")
             .nth(1)
-            .map(|pos| pos + 1)
+            .map(|pos| pos.sat_add(1))
             .unwrap_or(0);
 
         let max_end_padded = input[max_end..]
             .find_iter(" ")
             .nth(1)
-            .map(|pos| max_end + pos)
+            .map(|pos| max_end.sat_add(pos))
             .unwrap_or(input_len);
 
         // Ensure we don't go out of bounds
@@ -258,6 +260,21 @@ impl TokenizedChildLabel {
     }
 }
 
+impl PartialEq for TokenizedChildLabel {
+    fn eq(&self, other: &Self) -> bool {
+        #[cfg(feature = "caret_color")]
+        {
+            self.message == other.message && self.caret_color == other.caret_color
+        }
+        #[cfg(not(feature = "caret_color"))]
+        {
+            self.message == other.message
+        }
+    }
+}
+
+impl Eq for TokenizedChildLabel {}
+
 impl Into<LineTokenStream> for TokenizedChildLabel {
     fn into(self) -> LineTokenStream {
         self.message
@@ -335,7 +352,23 @@ impl TokenizedLabel {
     pub(crate) fn ref_color(&self) -> Option<&RgbColor> {
         self.caret_color.as_ref()
     }
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = TokenStreamLine> + '_ {
+        self.message.iter()
+    }
 }
+impl PartialEq for TokenizedLabel {
+    fn eq(&self, other: &Self) -> bool {
+        #[cfg(feature = "caret_color")]
+        {
+            self.message == other.message && self.caret_color == other.caret_color
+        }
+        #[cfg(not(feature = "caret_color"))]
+        {
+            self.message == other.message
+        }
+    }
+}
+impl Eq for TokenizedLabel {}
 impl Into<LineTokenStream> for TokenizedLabel {
     fn into(self) -> LineTokenStream {
         self.message
@@ -360,7 +393,9 @@ pub trait TryWithStyling {
 impl TryWithStyling for Token {
     fn try_with_coloring<A: AsRef<RgbColor>>(self, style: Option<A>) -> Self {
         if let Some(style) = style {
-            Token::Styled(AnsiStyle::RgbColor(*style.as_ref()), Some(Box::new(self)))
+            //Token::Styled(AnsiStyle::RgbColor(*style.as_ref()), Some(Box::new(self)))
+            Token::new_styled(AnsiStyle::RgbColor(*style.as_ref()), Some(Box::new(self)))
+                .map_or_else(|| Token::Reset, |t| *t)
         } else {
             self
         }

@@ -1,3 +1,5 @@
+use crate::saturating::SaturatingArithmetic;
+
 use super::*;
 
 /// TokenTree-esk line segments
@@ -22,7 +24,7 @@ pub enum Token {
     /// Space (amount)
     Space(usize),
     /// Plain text label
-    Label(String),
+    Literal(String),
     /// Represents a colored label with its associated line token stream, if None, the following tokens are colored
     Styled(AnsiStyle, Option<Box<Token>>),
     /// Reset color
@@ -54,7 +56,102 @@ impl_consts! {
 }
 pub const H_CARET: &str = "─";
 
+macro_rules! boxed_option {
+    (!) => {
+        None::<Box<Token>>
+    };
+    ($e:expr) => {
+        Some(Box::new($e))
+    };
+}
+use boxed_option as bo;
+
 impl Token {
+    #[allow(non_snake_case, dead_code)]
+    pub fn new_styled(style: AnsiStyle, inner: Option<Box<Token>>) -> Option<Box<Self>> {
+        if let Some(inner_token) = inner {
+            match *inner_token {
+                Self::Literal(label) => {
+                    if label.is_empty() {
+                        bo!(Token::Styled(style, None))
+                    } else {
+                        bo!(Token::Styled(style, Some(Box::new(Token::Literal(label)))))
+                    }
+                }
+                Self::Styled(ansi_style, inner) => {
+                    // Dedup if possible, as multiple consecutive styles are often redundant
+                    match (style, ansi_style) {
+                        (AnsiStyle::RgbColor(_), AnsiStyle::RgbColor(_))
+                        | (AnsiStyle::Color(_), AnsiStyle::Color(_)) => {
+                            //  No matter the color, the inner one would always overwrite the outer one
+                            bo!(Token::Styled(ansi_style, inner))
+                        }
+                        (AnsiStyle::Style(a), AnsiStyle::Style(b)) if a == b => {
+                            // Same style, so the inner would overwrite the outer one
+                            bo!(Token::Styled(ansi_style, inner))
+                        }
+                        (AnsiStyle::Style(a), AnsiStyle::Style(b)) if a != b => {
+                            // Styles dont overwrite each other, so we must nest them
+                            // But maybe the inner is nested further, so must recursive call Styled
+                            bo!(Token::Styled(style, Token::new_styled(ansi_style, inner)))
+                        }
+                        (AnsiStyle::Reset(a), AnsiStyle::Reset(b))
+                            if a == b || a == Resets::All || b == Resets::All =>
+                        {
+                            // Same reset or one is All, so they would overwrite each other
+                            bo!(Token::Styled(ansi_style, inner))
+                        }
+                        (AnsiStyle::Color(_) | AnsiStyle::RgbColor(_), AnsiStyle::Reset(reset))
+                            if matches!(reset, Resets::All | Resets::Color | Resets::FgColor) =>
+                        {
+                            // Same reset or one is All, so they would overwrite each other
+                            Token::new_styled(ansi_style, inner)
+                        }
+                        (AnsiStyle::Style(inner_style), AnsiStyle::Reset(reset)) => {
+                            match (inner_style, reset) {
+                                (_, Resets::All | Resets::Style) => {
+                                    // Reset All always overwrites any style
+                                    Token::new_styled(ansi_style, inner)
+                                }
+                                (Style::Bold, Resets::Bold)
+                                | (Style::Dim, Resets::Dim)
+                                | (Style::Italic, Resets::Italic)
+                                | (Style::Underline, Resets::Underline)
+                                | (Style::Blink, Resets::Blink)
+                                | (Style::Inverse, Resets::Inverse)
+                                | (Style::Hidden, Resets::Hidden)
+                                | (Style::Strikethrough, Resets::Strikethrough) => {
+                                    // The style would immediately be overwritten by the reset
+                                    Token::new_styled(ansi_style, inner)
+                                }
+                                _ => {
+                                    // Different styles, so we must nest them
+                                    // But maybe the inner is nested further, so must recursive call Styled
+                                    bo!(Token::Styled(style, Token::new_styled(ansi_style, inner)))
+                                }
+                            }
+                        }
+                        _ => {
+                            // Different styles, so we must nest them
+                            // But maybe the inner is nested further, so must recursive call Styled
+                            bo!(Token::Styled(style, Token::new_styled(ansi_style, inner)))
+                        }
+                    }
+                }
+                Self::Reset => {
+                    // Reset always overwrites any style
+                    bo!(!)
+                }
+                // As anything else cannot be nested, we just create a new styled token
+                _ => bo!(Token::Styled(style, Some(inner_token))),
+            }
+        } else {
+            // We still wanna keep the style, even if there is no inner token
+            // as this will get displayed (see Display impl)
+            bo!(Token::Styled(style, None))
+        }
+    }
+
     #[allow(non_snake_case)]
     pub fn SPACE(amount: usize) -> String {
         const SPACE: &str = " ";
@@ -70,17 +167,36 @@ impl Token {
         match self {
             Token::HCaret(amount) => *amount,
             Token::Space(amount) => *amount,
-            Token::Label(label) => label.len(),
-            Token::Styled(_, inner) => inner.as_ref().map_or(1, |b| b.len() + 1),
+            Token::Literal(label) => label.len(),
+            Token::Styled(_, inner) => inner.as_ref().map_or(1, |b| b.len().sat_add(1)),
             _ => 1,
         }
     }
 
     pub fn is_mergeable(&self) -> bool {
-        matches!(
-            self,
-            Token::HCaret(_) | Token::Space(_) | Token::Label(_) | Token::Reset // Reset is mergeable because 2 or more resets are the same as 1 reset
-        )
+        #[cfg(feature = "merging_tokens")]
+        {
+            matches!(
+                self,
+                Token::HCaret(_)
+                | Token::Space(_)
+                | Token::Literal(_)
+                // Reset is mergeable because 2 or more resets are the same as 1 reset
+                | Token::Reset
+                | Token::Styled(_, _)
+            )
+        }
+        #[cfg(not(feature = "merging_tokens"))]
+        {
+            matches!(
+                self,
+                Token::HCaret(_)
+                | Token::Space(_)
+                | Token::Literal(_)
+                // Reset is mergeable because 2 or more resets are the same as 1 reset
+                | Token::Reset
+            )
+        }
     }
 
     pub fn merge(&mut self, other: Token) -> Option<Token> {
@@ -96,11 +212,81 @@ impl Token {
                 *a += *b;
                 None
             }
-            (Token::Label(a), Token::Label(b)) => {
+            (Token::Literal(a), Token::Literal(b)) => {
                 a.push_str(&b);
                 None
             }
-            (Token::Reset, Token::Reset) => None, // No need to do anything, as 2 or more resets are the same as 1 reset
+            (Token::Reset, Token::Reset) => {
+                // No need to do anything, as 2 or more resets are the same as 1 reset
+                None
+            }
+            (
+                Token::Styled(AnsiStyle::Reset(Resets::All), _),
+                // Its important that the other is also a reset and empty
+                Token::Styled(AnsiStyle::Reset(_), None),
+            ) => {
+                // No need to do anything, as 2 or more style resets are the same as 1 style reset
+                None
+            }
+            (
+                Token::Styled(AnsiStyle::Reset(Resets::All), _),
+                // Its important that the other is also a reset and its label is empty (although that should never happen)
+                Token::Styled(AnsiStyle::Reset(_), Some(box Token::Literal(l))),
+            ) if l.is_empty() => {
+                // No need to do anything, as 2 or more style resets are the same as 1 style reset
+                None
+            }
+            (
+                Token::Styled(AnsiStyle::Reset(Resets::All), _),
+                // Its important that the other is also a reset and its label is empty (although that should never happen)
+                Token::Styled(
+                    AnsiStyle::Reset(_),
+                    Some(box (Token::Reset | Token::Styled(AnsiStyle::Reset(_), None))),
+                ),
+            ) => {
+                // No need to do anything, as 2 or more style resets are the same as 1 style reset
+                None
+            }
+            #[cfg(feature = "merging_tokens")]
+            (
+                Token::Styled(AnsiStyle::Color(color_a), Some(box inner_a)),
+                // Its important that the other is also a reset and empty
+                Token::Styled(AnsiStyle::Color(color_b), Some(box inner_b)),
+            ) => {
+                if color_a == color_b {
+                    // Same color, so the inner would overwrite the outer one
+                    if let Some(_) = inner_a.merge(inner_b.clone()) {
+                        // Not able to merge
+                        Some(other)
+                    } else {
+                        None
+                    }
+                } else {
+                    // Different colors, so we must not merge
+                    Some(other)
+                }
+                // No need to do anything, as 2 or more style resets are the same as 1 style reset
+            }
+            #[cfg(feature = "merging_tokens")]
+            (
+                Token::Styled(AnsiStyle::RgbColor(color_a), Some(box inner_a)),
+                // Its important that the other is also a reset and empty
+                Token::Styled(AnsiStyle::RgbColor(color_b), Some(box inner_b)),
+            ) => {
+                if color_a == color_b {
+                    // Same color, so the inner would overwrite the outer one
+                    if let Some(_) = inner_a.merge(inner_b.clone()) {
+                        // Not able to merge
+                        Some(other)
+                    } else {
+                        None
+                    }
+                } else {
+                    // Different colors, so we must not merge
+                    Some(other)
+                }
+                // No need to do anything, as 2 or more style resets are the same as 1 style reset
+            }
             _ => Some(other),
         }
     }
@@ -138,10 +324,9 @@ impl Token {
         if let Some(escape_pos) = stringzilla::sz::find(&haystack, NEELDE) {
             if escape_pos > 0 {
                 // There is a normal label before the escape sequence
-                // The NEEDLE is 2 characters long, so we need to subtract 1 (this is safe, as we checked escape_pos > 0)
                 // As we are only returning one token, we must return here, and return the remaining string
                 return Some((
-                    Token::Label(haystack[..escape_pos - 1].to_string()),
+                    Token::Literal(haystack[..escape_pos].to_string()),
                     Some(haystack[escape_pos..].to_string()),
                 ));
             }
@@ -151,8 +336,26 @@ impl Token {
                 // We have a valid ANSI style
                 if let Some(rem) = rem {
                     // Now try to parse the remaining string as a token
-                    if let Some(parsed) = Token::parse_from_str(rem) {
-                        return Some((Token::Styled(style, Some(Box::new(parsed.0))), parsed.1));
+                    if let Some((parsed_tkn, parsed_rem)) = Token::parse_from_str(rem) {
+                        // Check if there is a remaining string after parsing the token (even though this is redundant)
+                        if matches!(parsed_rem.as_ref(), Some(inner) if !inner.is_empty()) {
+                            // If there is a remaining string, we must return it
+                            return Some((
+                                Token::Styled(style, Some(Box::new(parsed_tkn))),
+                                parsed_rem,
+                            ));
+                        }
+                        #[cfg(feature = "merging_tokens")]
+                        {
+                            if let Some(box valid_style) =
+                                Token::new_styled(style, Some(Box::new(parsed_tkn)))
+                            {
+                                return Some((valid_style, None));
+                            }
+                            return None;
+                        }
+                        #[cfg(not(feature = "merging_tokens"))]
+                        return Some((Token::Styled(style, Some(Box::new(parsed_tkn))), None));
                     }
                     // The remaining string is empty or invalid, so just return the styled token
                     return Some((Token::Styled(style, None), None));
@@ -162,9 +365,9 @@ impl Token {
             }
             // Invalid ANSI sequence
             // We'll just treat it as a normal label
-            return Some((Token::Label(haystack), None));
+            return Some((Token::Literal(haystack), None));
         }
-        Some((Token::Label(haystack), None))
+        Some((Token::Literal(haystack), None))
     }
 
     pub(crate) fn parse_from_str<A: AsRef<str>>(s: A) -> Option<(Self, Option<String>)> {
@@ -176,72 +379,32 @@ impl Token {
         let first_char = chars.next().unwrap();
         let token = match first_char {
             '\u{1b}' => {
-                /* // ANSI escape sequence for color
-                let mut ansi_sequence = String::new();
-                ansi_sequence.push(first_char);
-                while let Some(c) = chars.next() {
-                    ansi_sequence.push(c);
-                    if c == 'm' {
-                        break;
-                    }
-                }
-                if ansi_sequence == "\u{1b}[0m" && ansi_sequence.len() == 4 {
-                    // Reset code
-                    return Some((Token::Reset, Some(chars.collect())));
-                }
-
-                // We dont wanna use regex here because its a heavy dependency and runtime for something this small
-                if ansi_sequence.chars().filter(|c| *c == ';').count() == 4 {
-                    // RGB ANSI color code
-                    ansi_sequence = ansi_sequence.split_off(7); // Remove the "\x1b[38;2;
-                } else {
-                    // Simple ANSI color code
-                    ansi_sequence = ansi_sequence.split_off(2); // Remove the "\x1b[
-                }
-                let _ = ansi_sequence.split_off(ansi_sequence.len() - 1); // Remove the trailing "m"
-                let parts = ansi_sequence.split(';'); // Split by ';'
-
-                // Now we only have the numbers left
-                let mut parts = parts.array_chunks();
-                let color = if let Some::<[&str; 3]>(parts) = parts.next() {
-                    let r = parts[0].parse::<u8>().unwrap_or(255);
-                    let g = parts[1].parse::<u8>().unwrap_or(255);
-                    let b = parts[2].parse::<u8>().unwrap_or(255);
-                    RgbColor::new(r, g, b)
-                } else {
-                    // We have a non-rgb ANSI color sequence
-                    // so its just a single color code
-                    if let Some(mut parts) = parts.into_remainder() {
-                        if let Some(code) = parts.next() {
-                            if parts.next().is_some() {
-                                return None; // Invalid color code
-                            }
-                            if let Ok(code) = code.parse::<u8>() {
-                                if let Some(color) = RgbColor::from_ansi_code(code) {
-                                    color
-                                } else {
-                                    return None; // Invalid color code
-                                }
-                            } else {
-                                return None; // Invalid color code
-                            }
-                        } else {
-                            return None; // Invalid color code
-                        }
-                    } else {
-                        return None; // Invalid color code
-                    }
-                }; */
-
                 if let Ok((style, rem)) = AnsiStyle::try_from_str(s) {
                     // We have a valid ANSI style
-                    if let Some(rem) = rem {
+                    if let Some(rem) = rem
+                        && !rem.is_empty()
+                    {
                         // Now try to parse the remaining string as a token
-                        if let Some(parsed) = Token::parse_from_str(rem) {
-                            return Some((
-                                Token::Styled(style, Some(Box::new(parsed.0))),
-                                parsed.1,
-                            ));
+                        if let Some((parsed_tkn, parsed_rem)) = Token::parse_from_str(rem) {
+                            // Check if there is a remaining string after parsing the token (even though this is redundant)
+                            if matches!(parsed_rem.as_ref(), Some(inner) if !inner.is_empty()) {
+                                // If there is a remaining string, we must return it
+                                return Some((
+                                    Token::Styled(style, Some(Box::new(parsed_tkn))),
+                                    parsed_rem,
+                                ));
+                            }
+                            #[cfg(feature = "merging_tokens")]
+                            {
+                                if let Some(box valid_style) =
+                                    Token::new_styled(style, Some(Box::new(parsed_tkn)))
+                                {
+                                    return Some((valid_style, None));
+                                }
+                                return None;
+                            }
+                            #[cfg(not(feature = "merging_tokens"))]
+                            return Some((Token::Styled(style, Some(Box::new(parsed_tkn))), None));
                         }
                         // The remaining string is empty or invalid, so just return the styled token
                         return Some((Token::Styled(style, None), None));
@@ -251,16 +414,16 @@ impl Token {
                 }
                 // Invalid ANSI sequence
                 // We'll just treat it as a normal label
-                return Some((Token::Label(s.to_string()), None));
+                return Some((Token::Literal(s.to_string()), None));
             }
             '│' => Token::VCaret,
-            '─' => Token::HCaret(chars.take_while_ref(|&c| c == '─').count() + 1),
+            '─' => Token::HCaret(chars.take_while_ref(|&c| c == '─').count().sat_add(1)),
             '┬' => Token::HDown,
             '╰' => Token::UpRight,
             '├' => Token::VRight,
             '┤' => Token::VLeft,
             '▶' => Token::LArrow,
-            ' ' => Token::Space(chars.take_while_ref(|&c| c == ' ').count() + 1),
+            ' ' => Token::Space(chars.take_while_ref(|&c| c == ' ').count().sat_add(1)),
             _ => {
                 let label = s.to_string();
                 return Self::parse_label(label);
@@ -273,6 +436,65 @@ impl Token {
             Some(remaining)
         };
         Some((token, remaining))
+    }
+
+    #[cfg(feature = "merging_tokens")]
+    pub fn fmt_context(&self, prev: &Self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match (prev, self) {
+            (Self::Reset, Self::Reset) => {
+                // No need to do anything, as 2 or more resets are the same as 1 reset and one was already printed as the "prev" token must've been preceded by something else or its just resets, in which case we dont print anything
+                Ok(())
+            }
+            (Self::Styled(ansi_style_a, token_a), Self::Styled(ansi_style_b, token_b)) => {
+                if f.alternate() {
+                    // No matter if the styles would've matched, the previous one has already been reset
+                    if matches!(token_b.as_ref(), Some(&box Token::Reset)) {
+                        // If there is no inner token, we dont want to print anything, as the style would be reset immediately after "nothing"
+                        return Ok(());
+                    }
+                    Display::fmt(&self, f)
+                } else {
+                    if ansi_style_a == ansi_style_b {
+                        // Same style, so the inner would overwrite the outer one
+                        if let Some(box inner_token) = token_b {
+                            inner_token.fmt_context(token_a.as_deref().unwrap_or(&Token::Reset), f)
+                        } else {
+                            // No inner token, so just print the style
+                            Display::fmt(&self, f)
+                        }
+                    } else {
+                        // Different styles, so we must print the current one as-is
+                        Display::fmt(&self, f)
+                    }
+                }
+            }
+            (_, Self::Reset) => {
+                if f.alternate() {
+                    // If alternate is set, we dont print resets after anything, as these would've been handled already
+                    Ok(())
+                } else {
+                    // We must print the reset, as it might be needed for the following tokens
+                    Display::fmt(&self, f)
+                }
+            }
+            _ => {
+                // We must print the token as-is, as it might be needed for the following tokens
+                Display::fmt(&self, f)
+            }
+        }
+    }
+    #[cfg(feature = "merging_tokens")]
+    pub fn format_context(&self, prev: &Self, alt: bool) -> String {
+        use ::std::fmt::FormattingOptions;
+
+        let mut output = String::new();
+        {
+            let mut opts = FormattingOptions::default();
+            opts.alternate(alt);
+            let mut formatter = std::fmt::Formatter::new(&mut output, opts);
+            let _ = self.fmt_context(prev, &mut formatter);
+        }
+        output
     }
 }
 
@@ -288,12 +510,19 @@ impl Display for Token {
             Token::LArrow => write!(f, "{}", Self::L_ARROW),
             Token::RArrow => write!(f, "{}", Self::R_ARROW),
             Token::Space(amount) => write!(f, "{}", Self::SPACE(*amount)),
-            Token::Label(label) => write!(f, "{}", label),
+            Token::Literal(label) => write!(f, "{}", label),
             Token::Styled(style, token) => {
                 write!(f, "{}", style)?;
                 if let Some(token) = token {
                     write!(f, "{}", token)?;
-                    write!(f, "{RESET}") // Reset color
+                    #[cfg(feature = "merging_tokens")]
+                    if f.alternate() {
+                        write!(f, "{}", Self::Reset) // Reset color
+                    } else {
+                        Ok(())
+                    }
+                    #[cfg(not(feature = "merging_tokens"))]
+                    write!(f, "{}", Self::Reset) // Reset color
                 } else {
                     // Dont reset color, as we want the following tokens to be colored
                     Ok(())

@@ -1,3 +1,5 @@
+use ::token::saturating::SaturatingArithmetic;
+
 use super::*;
 
 // We wanna be able to allow one to configure these at runtime
@@ -23,36 +25,10 @@ crate::impl_field!(
     ReportCaret,start,usize;
     ReportCaret,end,usize;
     ReportCaret,r_positions,Vec<ReportLabel>;
-    CaretLine,main,TokenStream;
     ReportLabel,position,usize;
     ReportLabel,message,TokenizedLabel;
     ReportLabel,child_labels,Vec<TokenizedChildLabel>;
 );
-
-#[derive(Debug, Clone, derive_more::Into, derive_more::From)]
-pub struct CaretLine {
-    main: TokenStream,
-    sep: Option<TokenStream>,
-}
-impl From<(Option<TokenStream>, TokenStream)> for CaretLine {
-    fn from(value: (Option<TokenStream>, TokenStream)) -> Self {
-        Self {
-            main: value.1,
-            sep: value.0,
-        }
-    }
-}
-impl CaretLine {
-    pub fn main_with<I: Into<TokenStream>>(&self, msg: I) -> LineTokenStream {
-        let mut line = LineTokenStream::new();
-        line.push_new(&self.main);
-        line.push_new(msg);
-        line
-    }
-    pub fn separator(&self) -> Option<&TokenStream> {
-        self.sep.as_ref()
-    }
-}
 
 #[derive(Debug, Clone)]
 pub(self) struct Lines {
@@ -94,6 +70,13 @@ impl Lines {
     pub fn new() -> Self {
         Self { lines: vec![] }
     }
+    #[allow(dead_code)]
+    pub fn last(&self) -> Option<&Line> {
+        self.lines.last()
+    }
+    pub fn last_mut(&mut self) -> Option<&mut Line> {
+        self.lines.last_mut()
+    }
 }
 impl IntoIterator for Lines {
     type Item = Line;
@@ -120,47 +103,63 @@ impl Display for Lines {
         if total == 1 {
             write!(f, "{last}")
         } else {
-            let mut until_last = iter.rev().take(total - 1);
-            until_last.try_for_each(|line| write!(f, "{line:#}"))?;
+            let mut skipped = iter.rev().take(total.sat_sub(1));
+            skipped.try_for_each(|line| write!(f, "{line:#}"))?;
             write!(f, "{last}")
         }
     }
 }
 
 #[derive(Debug, Clone)]
+/// A single line in the caret report
+///
+/// This is just a wrapper around a TokenStream
+/// to differentiate between the different types of lines
+/// but there is not logical difference between them (just easier to read)
 pub(self) enum Line {
+    /// Separator line with carets only
     Sep(TokenStream),
+    /// The underbar that annotates the positions of the labels on the reference input
     Underbar(TokenStream),
-    // Label with the carets
+    /// Label with the carets
     Label(TokenStream),
-    // Mutliline Label with the carets
-    // The first line is Self::Label and the rest are
-    // Self::LabelSeq (Label Sequence)
+    /// Mutliline Label with the carets
+    ///
+    /// The first line is Self::Label and the rest are
+    /// Self::LabelSeq (Label Sequence)
     LabelSeq(TokenStream),
 }
 impl Line {
     pub fn into_inner(self) -> TokenStream {
         match self {
-            Line::Sep(sep) => sep,
-            Line::Underbar(underbar) => underbar,
-            Line::LabelSeq(main) | Line::Label(main) => main,
+            Line::Sep(line) | Line::Underbar(line) | Line::LabelSeq(line) | Line::Label(line) => {
+                line
+            }
+        }
+    }
+    pub fn push<I: Into<Token>>(&mut self, token: I) -> &mut Self {
+        match self {
+            Line::Sep(line) | Line::Underbar(line) | Line::LabelSeq(line) | Line::Label(line) => {
+                line.push(token.into());
+            }
+        }
+        self
+    }
+    #[allow(dead_code)]
+    pub fn pop(&mut self) -> Option<Token> {
+        match self {
+            Line::Sep(line) | Line::Underbar(line) | Line::LabelSeq(line) | Line::Label(line) => {
+                line.pop()
+            }
         }
     }
 }
 impl Display for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // All lines share the same implementation of Display
         match self {
-            Line::Sep(sep) => write!(f, "{}{}", sep, f.alternate().then(|| "\n").unwrap_or("")),
-            Line::Underbar(underbar) => {
-                write!(
-                    f,
-                    "{}{}",
-                    underbar,
-                    f.alternate().then(|| "\n").unwrap_or("")
-                )
-            }
-            Line::LabelSeq(main) | Line::Label(main) => {
-                write!(f, "{}{}", main, f.alternate().then(|| "\n").unwrap_or(""))
+            Line::Sep(line) | Line::Underbar(line) | Line::LabelSeq(line) | Line::Label(line) => {
+                write!(f, "{}{}", line, f.alternate().then(|| "\n").unwrap_or(""))
             }
         }
     }
@@ -229,16 +228,54 @@ impl ReportCaret {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &ReportLabel> {
         self.r_positions.iter()
     }
-    pub fn push<I: Into<ReportLabel>>(&mut self, label: I) -> bool {
+    /// Adds a label to the caret report at the correct position
+    ///
+    /// If the label is out of bounds, the range is extended to include it
+    ///
+    /// This method does sort and dedup the labels after adding
+    /// to ensure that there are no duplicate labels and that they are in the correct order
+    pub fn push_sorted<I: Into<ReportLabel>>(&mut self, label: I) {
         let label: ReportLabel = label.into();
+        // Validate that the label is in bounds
         if label.position() > self.end.saturating_sub(self.start) {
-            false
+            // Its not in bounds, so we need to extend the range
+            self.start = self.start.min(label.position());
+            self.end = self.end.max(
+                label
+                    .position()
+                    .saturating_add(label.length.saturating_sub(1)),
+            );
+            self.r_positions.push(label.into());
         } else {
             self.r_positions.push(label.into());
-            self.r_positions.sort_by(|a, b| a.cmp(b));
-            self.r_positions.dedup();
-            self.r_positions.reverse();
-            true
+        }
+        self.r_positions.sort_by(|a, b| a.cmp(b));
+        self.r_positions.dedup();
+        self.r_positions.reverse();
+    }
+    /// Adds a label to the caret report at the correct position
+    ///
+    /// If the label is out of bounds, the range is extended to include it
+    ///
+    /// This method does NOT sort and dedup the labels after adding
+    /// thus it is the callers responsibility to ensure that there are no duplicate labels
+    /// and that they are in the correct order
+    ///
+    /// Its not encouraged to use this method
+    pub fn push<I: Into<ReportLabel>>(&mut self, label: I) {
+        let label: ReportLabel = label.into();
+        // Validate that the label is in bounds
+        if label.position() > self.end.saturating_sub(self.start) {
+            // Its not in bounds, so we need to extend the range
+            self.start = self.start.min(label.position());
+            self.end = self.end.max(
+                label
+                    .position()
+                    .saturating_add(label.length.saturating_sub(1)),
+            );
+            self.r_positions.push(label.into());
+        } else {
+            self.r_positions.push(label.into());
         }
     }
     pub fn pop(&mut self) -> Option<ReportLabel> {
@@ -272,8 +309,19 @@ impl ReportCaret {
 
         let mut last_color: Option<&RgbColor> = None;
 
+        #[cfg(feature = "merge_overlap")]
+        let mut last_pos = 0;
+
         for (i, label) in self.iter().rev().enumerate() {
             let pos = label.position();
+
+            #[cfg(feature = "merge_overlap")]
+            {
+                if pos == last_pos {
+                    continue;
+                }
+                last_pos = pos;
+            }
 
             let sep = pos.saturating_sub(last_index);
 
@@ -287,15 +335,15 @@ impl ReportCaret {
             };
             underbar.push(Token::HCaret(sep).try_with_coloring_feature(last_color));
             underbar.push(Token::HDown.try_with_coloring_feature(last_color));
-            last_index = pos + 1;
+            last_index = pos.sat_add(1);
 
-            if let Some(next) = self.iter().rev().nth(i + 1) {
+            if let Some(next) = self.iter().rev().nth(i.sat_add(1)) {
                 let next_pos = next.position();
 
                 // Cover the underbar until the "next" label
 
                 // We add 2, as we need to cover the HDown and the position of the next label
-                let next_sep = next_pos.saturating_sub(last_index + 2);
+                let next_sep = next_pos.saturating_sub(last_index.sat_add(2));
                 underbar.push(Token::HCaret(next_sep).try_with_coloring_feature(last_color));
                 last_index += next_sep;
             }
@@ -317,8 +365,20 @@ impl ReportCaret {
 
         let mut last_index = 0;
 
+        #[cfg(feature = "merge_overlap")]
+        let mut last_pos = 0;
+
         for label in self.iter().rev() {
             let pos = label.position();
+
+            #[cfg(feature = "merge_overlap")]
+            {
+                if pos == last_pos {
+                    continue;
+                }
+                last_pos = pos;
+            }
+
             let sep = pos.saturating_sub(last_index);
 
             #[cfg(feature = "caret_color")]
@@ -328,7 +388,7 @@ impl ReportCaret {
 
             underbar_sep.push(Token::Space(sep));
             underbar_sep.push(Token::VCaret.try_with_coloring_feature(label_caret_color));
-            last_index = pos + 1;
+            last_index = pos.sat_add(1);
         }
         if last_index < self.end.saturating_sub(self.start) {
             underbar_sep.push(Token::Space(
@@ -374,16 +434,45 @@ impl ReportCaret {
                     );
                 }
 
-                current_pos = pos + 1;
+                current_pos = pos.sat_add(1);
 
                 if i == 0 {
                     // Transition from H_CARET to UP_RIGHT
-                    label_line.push([
-                        Token::UpRight.try_with_coloring_feature(label_color),
-                        Token::HCaret(1).try_with_coloring_feature(label_color),
-                    ]);
+                    #[cfg(feature = "merge_overlap")]
+                    {
+                        // No we need to check that at this position, there are no other labels
+                        let transition = if self.iter().any(|l| l.position() == pos && l != label) {
+                            Token::VRight.try_with_coloring_feature(label_color)
+                        } else {
+                            Token::UpRight.try_with_coloring_feature(label_color)
+                        };
+                        label_line.push([
+                            transition,
+                            Token::HCaret(1).try_with_coloring_feature(label_color),
+                        ]);
+                    }
+
+                    #[cfg(not(feature = "merge_overlap"))]
+                    {
+                        label_line.push([
+                            Token::UpRight.try_with_coloring_feature(label_color),
+                            Token::HCaret(1).try_with_coloring_feature(label_color),
+                        ]);
+                    }
                 } else {
-                    label_line.push(Token::HCaret(1).try_with_coloring_feature(label_color));
+                    #[cfg(feature = "merge_overlap")]
+                    {
+                        // No we need to check that at this position, there are no other labels
+                        if !self.iter().any(|l| l.position() == pos && l != label) {
+                            label_line
+                                .push(Token::HCaret(1).try_with_coloring_feature(label_color));
+                        };
+                    }
+
+                    #[cfg(not(feature = "merge_overlap"))]
+                    {
+                        label_line.push(Token::HCaret(1).try_with_coloring_feature(label_color));
+                    }
                 }
             }
             // pop the position, so we dont print it again in the separator line
@@ -435,7 +524,7 @@ impl ReportCaret {
                         .unwrap_or(Line::Sep(TokenStream::new()))
                         .into_inner();
 
-                    // Add spaces until we reach the caret of the parent label + 2 (for the arrow-transition)
+                    // Add spaces until we reach the caret of the parent label +  2 (for the arrow-transition)
                     let current_pos = (sep).lit_len();
                     if current_pos == 0 {
                         let target_pos = parent_label_position
@@ -473,7 +562,7 @@ impl ReportCaret {
                                 Token::Space(2),
                                 pcc(Token::VCaret),
                                 // offset by 1 to indicate that the line was split
-                                Token::Space(ARROR_LABEL_PADDING_REF + 1),
+                                Token::Space(ARROR_LABEL_PADDING_REF.sat_add(1)),
                             ]);
                             label_line.extend(line);
                             lines.push(Line::LabelSeq(label_line));
@@ -489,7 +578,9 @@ impl ReportCaret {
                         pcc(Token::LArrow),
                         Token::Space(ARROR_LABEL_PADDING_REF),
                     ]);
+
                     label_line.extend(message.into_iter().next().unwrap());
+
                     lines.push(Line::Label(label_line));
                 }
 
@@ -526,7 +617,7 @@ impl ReportCaret {
                 let child_labels_len = child_labels.len();
                 for (i, child) in child_labels.into_iter().enumerate() {
                     // We can "unsafely" sub here, as the for loop ensures that child_labels_len > 0
-                    let is_last_child_label = i == child_labels_len - 1;
+                    let is_last_child_label = i == child_labels_len.sat_sub(1);
 
                     #[cfg(feature = "caret_color")]
                     let child_label_caret_color: Option<RgbColor> =
@@ -548,7 +639,7 @@ impl ReportCaret {
                     // Each child label is prepended by the same "child_sep" as that resembles the carets of the other labels
                     for child_label_line in child.into_iter() {
                         let mut child_line = child_sep.clone();
-                        // CHILD_LABEL_OFFSET + 2 as we need to offset the VCaret by 2, otherwise they would directly be next to the caret for the follwing labels
+                        // CHILD_LABEL_OFFSET +  2 as we need to offset the VCaret by 2, otherwise they would directly be next to the caret for the follwing labels
                         match (
                             child_label_line.is_first(),
                             is_last_child_label,
@@ -558,7 +649,7 @@ impl ReportCaret {
                             (true, true, true) => {
                                 child_line.push([
                                     ccc(Token::UpRight),
-                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF + 2)),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF.sat_add(2))),
                                     ccc(Token::LArrow),
                                     Token::Space(ARROR_LABEL_PADDING_REF),
                                 ]);
@@ -567,7 +658,7 @@ impl ReportCaret {
                             (true, false, true) => {
                                 child_line.push([
                                     pcc(Token::VRight),
-                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF + 2)),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF.sat_add(2))),
                                     ccc(Token::LArrow),
                                     Token::Space(ARROR_LABEL_PADDING_REF),
                                 ]);
@@ -576,7 +667,7 @@ impl ReportCaret {
                             (true, true, false) => {
                                 child_line.push([
                                     pcc(Token::UpRight),
-                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF + 2)),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF.sat_add(2))),
                                     ccc(Token::VLeft),
                                     Token::Space(ARROR_LABEL_PADDING_REF),
                                 ]);
@@ -585,7 +676,7 @@ impl ReportCaret {
                             (true, false, false) => {
                                 child_line.push([
                                     pcc(Token::VRight),
-                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF + 2)),
+                                    ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF.sat_add(2))),
                                     ccc(Token::VLeft),
                                     Token::Space(ARROR_LABEL_PADDING_REF),
                                 ]);
@@ -595,20 +686,20 @@ impl ReportCaret {
                                 child_line.push([
                                     // We do not wanna style the first caret, as it is the continuation of the parent label
                                     Token::VCaret,
-                                    Token::Space(CHILD_LABEL_OFFSET_DEREF + 2),
+                                    Token::Space(CHILD_LABEL_OFFSET_DEREF.sat_add(2)),
                                     ccc(Token::VCaret),
                                     // offset by 1 to indicate that the line was split
-                                    Token::Space(ARROR_LABEL_PADDING_REF + 1),
+                                    Token::Space(ARROR_LABEL_PADDING_REF.sat_add(1)),
                                 ]);
                             }
                             // Last Child label, but not the only line
                             (_, true, false) => {
                                 child_line.push([
                                     // We need to add an extra space here, as there are not more child labels, thus no carets which would offset the line
-                                    Token::Space(CHILD_LABEL_OFFSET_DEREF + 3),
+                                    Token::Space(CHILD_LABEL_OFFSET_DEREF.sat_add(3)),
                                     ccc(Token::VCaret),
                                     // offset by 1 to indicate that the line was split
-                                    Token::Space(ARROR_LABEL_PADDING_REF + 1),
+                                    Token::Space(ARROR_LABEL_PADDING_REF.sat_add(1)),
                                 ]);
                             }
                             (_, _, true) => {
@@ -638,7 +729,9 @@ impl ReportCaret {
                 lines.push(sep);
             }
         }
-
+        if let Some(last) = lines.last_mut() {
+            last.push(Token::Reset);
+        }
         Some(lines)
     }
     fn get_separator_line(&self) -> Option<Line> {
@@ -649,11 +742,23 @@ impl ReportCaret {
         sep.push(Token::Space(self.start));
         let mut current_pos = 0;
 
+        #[cfg(feature = "merge_overlap")]
+        let mut last_pos = 0;
+
         for label in self.iter().rev() {
             let pos = label.position();
+
+            #[cfg(feature = "merge_overlap")]
+            {
+                if pos == last_pos {
+                    continue;
+                }
+                last_pos = pos;
+            }
+
             // Insert spaces until we reach the next position
             sep.push(Token::Space(pos.saturating_sub(current_pos)));
-            current_pos = pos + 1;
+            current_pos = pos.sat_add(1);
             #[cfg(feature = "caret_color")]
             sep.push(Token::VCaret.try_with_coloring_feature(label.ref_label_color()));
 
@@ -666,7 +771,7 @@ impl ReportCaret {
 impl Display for ReportCaret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(formatted) = self.clone().format() {
-            write!(f, "{formatted}")
+            write!(f, "{formatted:#}")
         } else {
             std::fmt::Result::Err(std::fmt::Error)
         }
@@ -684,6 +789,9 @@ pub struct ReportLabel {
 impl PartialEq for ReportLabel {
     fn eq(&self, other: &Self) -> bool {
         self.position == other.position
+            && self.length == other.length
+            && self.message == other.message
+            && self.child_labels == other.child_labels
     }
 }
 impl Eq for ReportLabel {}
@@ -790,7 +898,7 @@ impl ReportLabels {
         let last: &ReportCaret = iter.next().expect("No labels");
 
         if len != 1 {
-            iter.rev().take(len - 1).try_for_each(|label| {
+            iter.rev().take(len.sat_sub(1)).try_for_each(|label| {
                 if display_range {
                     let range = label.range();
                     writeln!(writer, "{:#} [{range:#}]", ref_input)?;
@@ -885,7 +993,7 @@ impl<W: Write> Iterator for ReportWriter<'_, W> {
         }
         let label: &ReportCaret = &self.report_labels[self.index];
         self.index += 1;
-        let is_last = len == self.index + 1;
+        let is_last = len == self.index.sat_add(1);
         Some(write(
             self.writer,
             label,
