@@ -1019,12 +1019,21 @@ impl_saturating_arithmetic!(
             s / rhs
         ),
         (
-            s.saturating_rem(rhs),
+            // No saturating rem method
+            if rhs == 0 {
+                // Division by zero, return
+                0
+            } else if s == 0 {
+                0
+            } else {
+                s % rhs
+            }
+            ,
             s % rhs
         ),
         (
-            if s == isize::MIN {
-                isize::MAX
+            if s == Self::MIN {
+                Self::MAX
             } else if s < 0 {
                 -s
             } else {
@@ -1049,7 +1058,7 @@ impl_saturating_arithmetic!(
             *s = *s / rhs,
         ),
         (
-            *s = s.saturating_rem(rhs),
+            *s = s.sat_rem(rhs),
             *s = *s % rhs,
         ),
         (
@@ -1065,15 +1074,15 @@ impl_saturating_arithmetic!(
             s ^ rhs
         ),
         (
-            *s = s.saturating_bitand_assign(rhs),
+            *s = s.sat_bitand(rhs),
             *s = *s & rhs
         ),
         (
-            *s = s.saturating_bitor_assign(rhs),
+            *s = s.sat_bitor(rhs),
             *s = *s | rhs
         ),
         (
-            *s = s.saturating_bitxor_assign(rhs),
+            *s = s.sat_bitxor(rhs),
             *s = *s ^ rhs
         ),
         (
@@ -1101,32 +1110,84 @@ impl_saturating_arithmetic!(
     s,
     rhs,
     [
-        (s.saturating_add(rhs), s + rhs),
-        (s.saturating_sub(rhs), s - rhs),
-        (s.saturating_mul(rhs), s * rhs),
-        (s.saturating_div(rhs), s / rhs),
-        (s.saturating_rem(rhs), s % rhs),
         (
-            if s == isize::MIN {
-                isize::MAX
-            } else if s < 0 {
+            // No saturating methods for floats
+            if (s as f64) + (rhs as f64) > (f32::MAX as f64) {
+                f32::MAX
+            } else if (s as f64) + (rhs as f64) < (f32::MIN as f64) {
+                f32::MIN
+            } else {
+                s + rhs
+            },
+            s + rhs
+        ),
+        (
+            if (s as f64) - (rhs as f64) > (f32::MAX as f64) {
+                f32::MAX
+            } else if (s as f64) - (rhs as f64) < (f32::MIN as f64) {
+                f32::MIN
+            } else {
+                s - rhs
+            },
+            s - rhs
+        ),
+        (
+            if (s as f64) * (rhs as f64) > (f32::MAX as f64) {
+                f32::MAX
+            } else if (s as f64) * (rhs as f64) < (f32::MIN as f64) {
+                f32::MIN
+            } else {
+                s * rhs
+            },
+            s * rhs
+        ),
+        (
+            if rhs == 0.0 {
+                if s >= 0.0 { f32::MAX } else { f32::MIN }
+            } else if (s as f64) / (rhs as f64) > (f32::MAX as f64) {
+                f32::MAX
+            } else if (s as f64) / (rhs as f64) < (f32::MIN as f64) {
+                f32::MIN
+            } else {
+                s / rhs
+            },
+            s / rhs
+        ),
+        (
+            if rhs == 0.0 {
+                if s >= 0.0 { f32::MAX } else { f32::MIN }
+            } else if (s as f64) % (rhs as f64) > (f32::MAX as f64) {
+                f32::MAX
+            } else if (s as f64) % (rhs as f64) < (f32::MIN as f64) {
+                f32::MIN
+            } else {
+                s % rhs
+            },
+            s % rhs
+        ),
+        (
+            if s.is_nan() {
+                f32::MAX
+            } else if s == f32::MIN {
+                f32::MAX
+            } else if s < 0.0 {
                 -s
             } else {
                 s
             },
             s
         ),
-        (*s = s.saturating_add(rhs), *s = *s + rhs,),
-        (*s = s.saturating_sub(rhs), *s = *s - rhs,),
-        (*s = s.saturating_mul(rhs), *s = *s * rhs,),
-        (*s = s.saturating_div(rhs), *s = *s / rhs,),
-        (*s = s.saturating_rem(rhs), *s = *s % rhs,),
+        (*s = s.sat_add(rhs), *s = *s + rhs,),
+        (*s = s.sat_sub(rhs), *s = *s - rhs,),
+        (*s = s.sat_mul(rhs), *s = *s * rhs,),
+        (*s = s.sat_div(rhs), *s = *s / rhs,),
+        (*s = s.sat_rem(rhs), *s = *s % rhs,),
         (s & rhs, s & rhs),
         (s | rhs, s | rhs),
         (s ^ rhs, s ^ rhs),
-        (*s = s.saturating_bitand_assign(rhs), *s = *s & rhs),
-        (*s = s.saturating_bitor_assign(rhs), *s = *s | rhs),
-        (*s = s.saturating_bitxor_assign(rhs), *s = *s ^ rhs),
+        (*s = s.sat_bitand(rhs), *s = *s & rhs),
+        (*s = s.sat_bitor(rhs), *s = *s | rhs),
+        (*s = s.sat_bitxor(rhs), *s = *s ^ rhs),
         (
             if rhs >= Self::MAX {
                 0 as Self

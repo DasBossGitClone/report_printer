@@ -4,7 +4,7 @@
     version = "1.2.0"
 
 [features]
-    debug = ["caret_color", "merge_overlap"]
+    debug = ["saturating_arithmetic"]
     # Enable the use of color in the arrows and carets
     caret_color = []
     # Enable saturating arithmetic for all arithmetic operations.
