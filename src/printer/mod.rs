@@ -17,7 +17,7 @@ pub use carets::{set_arrow_label_padding, set_child_label_offset};
 impl Report {
     pub fn write<W: Write>(self, writer: &mut W) -> io::Result<()> {
         self.report_labels
-            .write(writer, &self.input, self.display_range)
+            .write(writer, &self.input, self.colored_input, self.display_range)
     }
 
     pub fn into_writer<'a, W: Write>(&'a self, writer: &'a mut W) -> ReportWriter<'a, W> {

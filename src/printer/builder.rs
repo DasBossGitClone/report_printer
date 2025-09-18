@@ -9,6 +9,7 @@ use super::*;
 pub struct Report {
     pub(crate) display_range: bool,
     pub(super) input: TokenStream,
+    pub(super) colored_input: bool,
     pub(super) report_labels: ReportLabels,
 }
 impl Report {
@@ -17,11 +18,13 @@ impl Report {
         offset: usize,
         display_range: bool,
         labels: impl IntoIterator<Item = TokenizedLabelFull>,
+        colored_input: bool,
     ) -> Self {
         let input = input.into();
         Self {
             display_range,
             input: TokenStream::from(&input),
+            colored_input,
             report_labels: Self::generate_underbar(offset, labels),
         }
     }

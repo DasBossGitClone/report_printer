@@ -287,6 +287,70 @@ impl ReportCaret {
     pub fn len(&self) -> usize {
         self.r_positions.len()
     }
+    pub(super) fn get_underbar_ranges(&self) -> Vec<(usize, usize, Option<RgbColor>)> {
+        if self.is_empty() {
+            return vec![];
+        }
+
+        let mut ranges = Vec::with_capacity(self.len());
+
+        let mut last_color: Option<RgbColor> = None;
+
+        #[cfg(feature = "merge_overlap")]
+        let mut last_pos = 0;
+
+        let mut index = self.end;
+
+        for label in self.iter() {
+            #[cfg(feature = "caret_color")]
+            {
+                last_color = label.message.ref_color().cloned();
+            }
+            #[cfg(not(feature = "caret_color"))]
+            {
+                last_color = label
+                    .message
+                    .message
+                    .iter()
+                    .find_map(|line| {
+                        line.iter().find_map(|tkn| {
+                            if let Token::Styled(color, _) = tkn {
+                                match color {
+                                    AnsiStyle::RgbColor(rgb) => Some(*rgb),
+                                    AnsiStyle::Color(color) => Some(RgbColor::from(*color)),
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .or(last_color);
+            };
+            // We dont wanna use "position" from the ReportLabel here, as that inducates the caret position
+            // but we wanna cover the whole label
+            let len = label.length;
+            if self.end.saturating_sub(len) < index {
+                let sep = index.saturating_sub(self.end.saturating_sub(len));
+                if sep > 0 && last_color.is_some() {
+                    ranges.push((self.end.saturating_sub(len), sep, last_color.clone()));
+                }
+                index = self.end.saturating_sub(len);
+            } else {
+                // We push until we hit the start of the underbar
+                break;
+            }
+        }
+        if index > self.start {
+            let sep = index.saturating_sub(self.start);
+            if sep > 0 && last_color.is_some() {
+                ranges.push((self.start, sep, last_color.clone()));
+            }
+        }
+
+        ranges
+    }
+
     pub(self) fn format(mut self) -> Option<Lines> {
         // We wanna deref them once, so we dont need to do unsafe blocks everywhere else
         #[allow(non_snake_case)]
@@ -294,11 +358,10 @@ impl ReportCaret {
         #[allow(non_snake_case)]
         let CHILD_LABEL_OFFSET_DEREF = unsafe { CHILD_LABEL_OFFSET };
 
-        let mut lines = Lines::new();
-
         if self.is_empty() {
             return None;
         }
+        let mut lines = Lines::new();
 
         let mut underbar = TokenStream::new();
         let mut underbar_sep = TokenStream::new();
@@ -883,6 +946,7 @@ impl ReportLabels {
         &self,
         mut writer: T,
         ref_input: A,
+        colored_input: bool,
         display_range: bool,
     ) -> std::io::Result<()> {
         if self.is_empty() {
@@ -891,32 +955,70 @@ impl ReportLabels {
 
         let ref_input: TokenBuffer = ref_input.as_ref().into();
 
-        let len = self.len();
+        self.labels.iter().try_for_each(|label| {
+            let range = label.range();
+            if colored_input {
+                let color_ranges = label.get_underbar_ranges();
+                let mut index = 0;
 
-        let mut iter: std::iter::Rev<std::slice::Iter<'_, ReportCaret>> = self.labels.iter().rev();
+                if color_ranges.is_empty() {
+                    write!(writer, "{:#}", ref_input)?;
+                } else {
+                    let ref_input_str = ref_input.to_string();
 
-        let last: &ReportCaret = iter.next().expect("No labels");
+                    for (start, len, color) in color_ranges {
+                        if start > index {
+                            // Write plain until we reach the start
+                            if let Some(ref_input_slice) = ref_input_str.get(index..start) {
+                                write!(writer, "{:#}", ref_input_slice)?;
+                            }
+                            index = start;
+                        }
+                        if let Some(color) = color {
+                            if let Some(ref_input_slice) =
+                                ref_input_str.get(index..start.sat_add(len))
+                            {
+                                write!(
+                                    writer,
+                                    "{color}{:#}{}",
+                                    ref_input_slice,
+                                    AnsiStyle::RESET_COLOR
+                                )?;
+                            }
+                        } else {
+                            if let Some(ref_input_slice) =
+                                ref_input_str.get(index..start.sat_add(len))
+                            {
+                                write!(writer, "{:#}", ref_input_slice)?;
+                            }
+                        }
+                        index = start.sat_add(len);
+                    }
 
-        if len != 1 {
-            iter.rev().take(len.sat_sub(1)).try_for_each(|label| {
+                    if index < ref_input_str.len() {
+                        if let Some(ref_input_slice) = ref_input_str.get(index..ref_input_str.len())
+                        {
+                            write!(writer, "{:#}", ref_input_slice)?;
+                        }
+                    }
+                }
                 if display_range {
-                    let range = label.range();
+                    writeln!(writer, " [{range:#}]")?;
+                } else {
+                    writeln!(writer)?;
+                }
+            } else {
+                if display_range {
                     writeln!(writer, "{:#} [{range:#}]", ref_input)?;
                 } else {
                     writeln!(writer, "{:#}", ref_input)?;
                 }
-                writeln!(writer, "{:#}", label)?;
-                // Just add a separator line between
-                writeln!(writer)
-            })?;
-        }
-        if display_range {
-            let range = last.range();
-            writeln!(writer, "{:#} [{range:#}]", ref_input)?;
-        } else {
-            writeln!(writer, "{:#}", ref_input)?;
-        }
-        writeln!(writer, "{:#}", last)
+            }
+
+            writeln!(writer, "{:#}", label)?;
+            // Just add a separator line between
+            writeln!(writer)
+        })
     }
 
     pub fn into_writer<'a, W: Write, A: AsRef<[Token]>>(

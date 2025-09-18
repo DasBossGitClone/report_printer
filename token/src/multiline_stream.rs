@@ -332,6 +332,9 @@ impl TokenStreamLine {
     pub fn is_empty(&self) -> bool {
         self.line.is_empty()
     }
+    pub fn iter(&self) -> std::slice::Iter<'_, Token> {
+        self.line.iter()
+    }
 }
 impl IntoIterator for TokenStreamLine {
     type Item = Token;

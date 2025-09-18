@@ -140,6 +140,7 @@ pub struct ReportBuilder {
     max_label_length: usize,
     /// If not set, it will be set to "max_label_length - CHILD_LABEL_PADDING" to offset the padding on the child labels
     max_child_label_length: Option<usize>,
+    colored_input: bool,
     #[cfg(feature = "caret_color")]
     caret_color: bool,
 }
@@ -154,14 +155,20 @@ impl ReportBuilder {
             // Default max label length is 30 characters
             max_label_length: 30,
             max_child_label_length: None,
+            colored_input: false,
             #[cfg(feature = "caret_color")]
             caret_color: false,
         }
     }
 
     #[cfg(feature = "caret_color")]
-    pub fn caret_color(mut self) -> Self {
-        self.caret_color = true;
+    pub fn caret_color(mut self, colored: bool) -> Self {
+        self.caret_color = colored;
+        self
+    }
+
+    pub fn colored_input(mut self, colored: bool) -> Self {
+        self.colored_input = colored;
         self
     }
 
@@ -486,6 +493,7 @@ impl ReportBuilder {
             input_label_offset,
             self.display_range,
             labels,
+            self.colored_input,
         ))
     }
 }

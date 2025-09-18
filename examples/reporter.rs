@@ -127,7 +127,7 @@ fn empty_child_label_message() {
 
 #[cfg(feature = "caret_color")]
 fn single_label_with_color_and_caret_color() {
-    let mut report = ReportBuilder::new("Another test input").caret_color();
+    let mut report = ReportBuilder::new("Another test input").caret_color(true);
     let label = Label::new(0..13, "A label at the start")
         .with_color(AnsiStyle::GREEN)
         .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
@@ -143,7 +143,7 @@ fn overlapping_labels_with_color_and_caret_color() {
     use ::token::RgbColor;
 
     let mut report =
-        ReportBuilder::new("Another test input, more text, even more text").caret_color();
+        ReportBuilder::new("Another test input, more text, even more text").caret_color(true);
     let label = Label::new(3..=14, "A label at the start\nwith two lines")
         .with_color(AnsiStyle::GREEN)
         .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
@@ -216,7 +216,8 @@ fn directly_overlaping_labels_merged() {
 #[cfg(all(feature = "merge_overlap", feature = "caret_color"))]
 fn directly_overlaping_labels_merged_with_caret_color() {
     use ::token::RgbColor;
-    let mut report = ReportBuilder::new("Test input for directly overlapping labels").caret_color();
+    let mut report =
+        ReportBuilder::new("Test input for directly overlapping labels").caret_color(true);
     let label = Label::new(5..=20, "First label")
         .with_caret_color(RgbColor::BRIGHT_GREEN)
         .with_color(AnsiStyle::GREEN)
@@ -250,6 +251,19 @@ fn directly_overlaping_labels_merged_with_caret_color() {
                 .with_color(AnsiStyle::WHITE)
                 .with_caret_color(RgbColor::WHITE),
         );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
+fn multiline_overlapping_labels_colored_input() {
+    let mut report = ReportBuilder::new("Another test input").colored_input(true);
+    let label = Label::new(0..13, "A label at the start")
+        .with_color(AnsiStyle::GREEN)
+        .with_child_label(ChildLabel::new("Child label A").with_color(AnsiStyle::RED))
+        .with_child_label(ChildLabel::new("Child label B"));
     report.push(label);
     let report = report.finish().unwrap();
     let mut output = Vec::new();
@@ -297,4 +311,6 @@ fn main() {
         println!("----------------------------------------");
         directly_overlaping_labels_merged_with_caret_color();
     }
+    println!("----------------------------------------");
+    multiline_overlapping_labels_colored_input();
 }

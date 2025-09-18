@@ -1,3 +1,5 @@
+use ::std::{borrow::Borrow, slice::SliceIndex};
+
 use super::*;
 
 #[derive(Clone, PartialEq, Eq, Hash, derive_more::Into, derive_more::IntoIterator)]
@@ -72,6 +74,10 @@ impl TokenStream {
             *first = Token::Styled(style.into(), Some(Box::new(first.clone())));
             self.push(Token::Reset);
         }
+    }
+    pub fn with_color<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
+        self.on_color(style);
+        self
     }
 
     pub fn push<T: Into<Token>, I: IntoIterator<Item = T>>(&mut self, item: I) {
@@ -175,7 +181,7 @@ impl AsMut<[Token]> for TokenStream {
 impl Display for TokenStream {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let tokenbuffer = TokenBuffer::new(&self.tokens);
-        tokenbuffer.fmt(f)
+        Display::fmt(&tokenbuffer, f)
     }
 }
 
@@ -203,6 +209,7 @@ impl<A: AsRef<str>> From<A> for TokenStream {
 }
 
 /// The borrowed variant of TokenStream
+#[derive(Debug, Clone)]
 pub struct TokenBuffer<'a> {
     pub buffer: &'a [Token],
 }
@@ -210,6 +217,20 @@ impl<'a> TokenBuffer<'a> {
     pub fn new<A: AsRef<[Token]> + ?Sized>(buffer: &'a A) -> Self {
         Self {
             buffer: buffer.as_ref(),
+        }
+    }
+
+    pub fn get<I: SliceIndex<[token::Token], Output = [Token]>>(
+        &'a self,
+        index: I,
+    ) -> Option<TokenBuffer<'a>> {
+        self.buffer
+            .get(index)
+            .map(|slice| TokenBuffer { buffer: slice })
+    }
+    pub fn to_owned(&self) -> TokenStream {
+        TokenStream {
+            tokens: self.buffer.to_vec(),
         }
     }
 }
@@ -253,5 +274,11 @@ impl AsRef<[Token]> for TokenBuffer<'_> {
 impl<'a, I: AsRef<[Token]> + ?Sized + 'a> From<&'a I> for TokenBuffer<'a> {
     fn from(value: &'a I) -> Self {
         Self::new(value)
+    }
+}
+
+impl Borrow<[Token]> for TokenBuffer<'_> {
+    fn borrow(&self) -> &[Token] {
+        self.buffer
     }
 }
