@@ -7,10 +7,6 @@ use super::*;
 /// Contained labels are printed each on their own
 #[derive(Debug)]
 pub struct Report {
-    /* pub(super) input_label_offset: usize,
-    pub(crate) raw_input: String,
-    pub(super) labels: Vec<TokenizedLabel>,
-    */
     pub(crate) display_range: bool,
     pub(super) input: TokenStream,
     pub(super) report_labels: ReportLabels,
