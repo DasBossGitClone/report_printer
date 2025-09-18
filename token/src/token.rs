@@ -56,19 +56,20 @@ impl_consts! {
 }
 pub const H_CARET: &str = "─";
 
-macro_rules! boxed_option {
-    (!) => {
-        None::<Box<Token>>
-    };
-    ($e:expr) => {
-        Some(Box::new($e))
-    };
-}
-use boxed_option as bo;
-
 impl Token {
     #[allow(non_snake_case, dead_code)]
+    #[cfg(feature = "merging_tokens")]
     pub fn new_styled(style: AnsiStyle, inner: Option<Box<Token>>) -> Option<Box<Self>> {
+        macro_rules! boxed_option {
+            (!) => {
+                None::<Box<Token>>
+            };
+            ($e:expr) => {
+                Some(Box::new($e))
+            };
+        }
+        use boxed_option as bo;
+
         if let Some(inner_token) = inner {
             match *inner_token {
                 Self::Literal(label) => {

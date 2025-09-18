@@ -393,9 +393,15 @@ pub trait TryWithStyling {
 impl TryWithStyling for Token {
     fn try_with_coloring<A: AsRef<RgbColor>>(self, style: Option<A>) -> Self {
         if let Some(style) = style {
-            //Token::Styled(AnsiStyle::RgbColor(*style.as_ref()), Some(Box::new(self)))
-            Token::new_styled(AnsiStyle::RgbColor(*style.as_ref()), Some(Box::new(self)))
-                .map_or_else(|| Token::Reset, |t| *t)
+            #[cfg(not(feature = "merging_tokens"))]
+            {
+                Token::Styled(AnsiStyle::RgbColor(*style.as_ref()), Some(Box::new(self)))
+            }
+            #[cfg(feature = "merging_tokens")]
+            {
+                Token::new_styled(AnsiStyle::RgbColor(*style.as_ref()), Some(Box::new(self)))
+                    .map_or_else(|| Token::Reset, |t| *t)
+            }
         } else {
             self
         }
