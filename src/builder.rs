@@ -249,7 +249,7 @@ impl Label {
         self
     }
 
-    pub fn push<I: Into<ChildLabel>>(mut self, child_label: I) -> Self {
+    pub fn push<I: Into<ChildLabel>>(&mut self, child_label: I) -> &mut Self {
         self.child_labels.push(child_label.into());
         self
     }
