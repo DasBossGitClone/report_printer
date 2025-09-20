@@ -31,6 +31,28 @@ fn multi_line_label_and_childlabel() {
     print!("{}", String::from_utf8_lossy(&output));
 }
 
+fn three_labels() {
+    let mut report = ReportBuilder::new("This is a test input string").with_range();
+    let label = Label::new(5..=14, "This is a test label\nwith more than one line")
+        .with_child_label(ChildLabel::new("This is a child label\nwith two lines"))
+        .with_child_label(ChildLabel::new("This is another child label"));
+    report.push(label);
+    let label = Label::new(2..=4, "This is another label")
+        .with_child_label(ChildLabel::new("Child label 1"))
+        .with_child_label(ChildLabel::new("Child label 2"))
+        .with_child_label(ChildLabel::new("Child label 3"));
+    report.push(label);
+    let label = Label::new(10..=15, "Third label")
+        .with_child_label(ChildLabel::new("Third Child label 1"))
+        .with_child_label(ChildLabel::new("Third Child label 2"))
+        .with_child_label(ChildLabel::new("Third Child label 3"));
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
 fn with_color() {
     let mut report = ReportBuilder::new("Another test input");
     let label = Label::new(0..13, "A label at the start")
@@ -108,18 +130,55 @@ fn write_iter_callback() {
     report.push(label);
     let report = report.finish().unwrap();
     let mut output = Vec::new();
-    let writer = report.into_writer_with(&mut output, |res, meta| {
-        res.map(|_| {
-            Some(format!(
-                "Writing part {}/{} (is_first: {}, is_last: {}, is_only: {})\n\n",
-                meta.index + 1,
-                meta.total,
-                meta.is_first,
-                meta.is_last,
-                meta.is_only
-            ))
-        })
-    });
+    let writer = report.into_writer_with(
+        &mut output,
+        |_| Some("Writing directly before the part\n"),
+        |_, meta| -> Option<String> {
+            Some(
+                format!(
+                    "Writing directly after (part {} of {})\n",
+                    meta.current(), meta.total()
+                )
+                .to_string(),
+            )
+        },
+    );
+
+    for res in writer {
+        res.expect("Failed to write report");
+    }
+
+    print!("{}", String::from_utf8_lossy(&output));
+}
+fn write_iter_callback_none() {
+    let mut report = ReportBuilder::new("Longer Test - Another test input");
+    let label = Label::new(22..=26, "Overlapping label")
+        .with_child_label(ChildLabel::new("Child label X").with_color(AnsiStyle::ITALIC))
+        .with_child_label(
+            ChildLabel::new("Child label Y")
+                //.with_color(AnsiStyle::UNDERLINE)
+                .with_color(AnsiStyle::CYAN)
+                .with_color(AnsiStyle::BOLD),
+        );
+    report.push(label);
+    let label = Label::new(5..=14, "This is a test label\nwith more than one line")
+        .with_child_label(ChildLabel::new("This is a child label\nwith two lines"))
+        .with_child_label(ChildLabel::new("This is another child label"));
+    report.push(label);
+    let label = Label::new(0..4, "Short label at start");
+    report.push(label);
+    let label = Label::new(5..=5, "Another short label overlapping start")
+        .with_child_label(ChildLabel::new("Child label overlapping start"));
+
+    report.push(label);
+
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    let writer = report.into_writer_with(
+        &mut output,
+        |_| None::<String>,
+        |_, _| -> Option<String> { None },
+    );
 
     for res in writer {
         res.expect("Failed to write report");
@@ -135,6 +194,8 @@ fn no_labels() {
 
 #[cfg(not(feature = "truncate_out_of_bounds"))]
 fn out_of_bounds() {
+    use ::reporter::RangeInclusive;
+
     let mut report = ReportBuilder::new("Short input");
     let label = Label::new(0..20, "Out of bounds label");
     report.push(label);
@@ -438,6 +499,8 @@ fn main() {
     println!("----------------------------------------");
     multi_line_label_and_childlabel();
     println!("----------------------------------------");
+    three_labels();
+    println!("----------------------------------------");
     with_color();
     println!("----------------------------------------");
     multiline_overlapping_labels();
@@ -485,4 +548,6 @@ fn main() {
     }
     println!("----------------------------------------");
     write_iter_callback();
+    println!("----------------------------------------");
+    write_iter_callback_none();
 }

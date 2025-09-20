@@ -990,70 +990,88 @@ impl ReportLabels {
 
         let ref_input: TokenBuffer = ref_input.as_ref().into();
 
-        self.labels.iter().try_for_each(|label| {
-            let range = label.range();
-            if colored_input {
-                let color_ranges = label.get_underbar_ranges();
-                let mut index = 0;
+        let len = self.labels.len().saturating_sub(1);
 
-                if color_ranges.is_empty() {
-                    write!(writer, "{:#}", ref_input)?;
-                } else {
-                    let ref_input_str = ref_input.to_string();
+        self.labels.iter().enumerate().try_for_each(|(i, label)| {
+            Self::write_single(
+                &mut writer,
+                label,
+                colored_input,
+                display_range,
+                len == i,
+                &ref_input,
+            )
+        })
+    }
+    pub(self) fn write_single<'a, W: Write, I: Into<TokenBuffer<'a>>>(
+        writer: &mut W,
+        label: &ReportCaret,
+        colored_input: bool,
+        display_range: bool,
+        is_last: bool,
+        ref_input: I,
+    ) -> std::io::Result<()> {
+        let range = label.range();
+        let ref_input: TokenBuffer = ref_input.into();
 
-                    for (start, len, color) in color_ranges {
-                        if start > index {
-                            // Write plain until we reach the start
-                            if let Some(ref_input_slice) = ref_input_str.get(index..start) {
-                                write!(writer, "{:#}", ref_input_slice)?;
-                            }
-                            index = start;
+        if colored_input {
+            let color_ranges = label.get_underbar_ranges();
+            let mut index = 0;
+
+            if color_ranges.is_empty() {
+                write!(writer, "{:#}", ref_input)?;
+            } else {
+                let ref_input_str = ref_input.to_string();
+
+                for (start, len, color) in color_ranges {
+                    if start > index {
+                        // Write plain until we reach the start
+                        if let Some(ref_input_slice) = ref_input_str.get(index..start) {
+                            write!(writer, "{:#}", ref_input_slice)?;
                         }
-                        if let Some(color) = color {
-                            if let Some(ref_input_slice) =
-                                ref_input_str.get(index..start.sat_add(len))
-                            {
-                                write!(
-                                    writer,
-                                    "{color}{:#}{}",
-                                    ref_input_slice,
-                                    AnsiStyle::RESET_COLOR
-                                )?;
-                            }
-                        } else {
-                            if let Some(ref_input_slice) =
-                                ref_input_str.get(index..start.sat_add(len))
-                            {
-                                write!(writer, "{:#}", ref_input_slice)?;
-                            }
-                        }
-                        index = start.sat_add(len);
+                        index = start;
                     }
-
-                    if index < ref_input_str.len() {
-                        if let Some(ref_input_slice) = ref_input_str.get(index..ref_input_str.len())
+                    if let Some(color) = color {
+                        if let Some(ref_input_slice) = ref_input_str.get(index..start.sat_add(len))
+                        {
+                            write!(
+                                writer,
+                                "{color}{:#}{}",
+                                ref_input_slice,
+                                AnsiStyle::RESET_COLOR
+                            )?;
+                        }
+                    } else {
+                        if let Some(ref_input_slice) = ref_input_str.get(index..start.sat_add(len))
                         {
                             write!(writer, "{:#}", ref_input_slice)?;
                         }
                     }
+                    index = start.sat_add(len);
                 }
-                if display_range {
-                    writeln!(writer, " [{range:#}]")?;
-                } else {
-                    writeln!(writer)?;
-                }
-            } else {
-                if display_range {
-                    writeln!(writer, "{:#} [{range:#}]", ref_input)?;
-                } else {
-                    writeln!(writer, "{:#}", ref_input)?;
+
+                if index < ref_input_str.len() {
+                    if let Some(ref_input_slice) = ref_input_str.get(index..ref_input_str.len()) {
+                        write!(writer, "{:#}", ref_input_slice)?;
+                    }
                 }
             }
+            if display_range {
+                writeln!(writer, " [{range:#}]")?;
+            } else {
+                writeln!(writer)?;
+            }
+        } else {
+            if display_range {
+                writeln!(writer, "{:#} [{range:#}]", ref_input)?;
+            } else {
+                writeln!(writer, "{:#}", ref_input)?;
+            }
+        }
 
-            writeln!(writer, "{:#}", label)?;
-            // Just add a separator line between
-            writeln!(writer)
-        })
+        writeln!(writer, "{:#}", label)?;
+        // Just add a separator line between
+        if is_last { Ok(()) } else { writeln!(writer) }
     }
 
     pub fn into_writer<'a, W: Write, A: AsRef<[Token]>>(
@@ -1073,21 +1091,25 @@ impl ReportLabels {
         'a,
         W: Write,
         D: Display,
-        F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<Option<D>>,
-        A: AsRef<[Token]>,
+        I: Display,
+        B: FnMut(ReportWriterMeta) -> Option<D>,
+        A: for<'b> FnMut(Option<&'b io::Error>, ReportWriterMeta) -> Option<I>,
+        T: AsRef<[Token]>,
     >(
         &'a self,
         writer: &'a mut W,
-        reference_input: &'a A,
+        reference_input: &'a T,
         display_range: bool,
-        callback: F,
-    ) -> ReportWriterWith<'a, W, D, F> {
+        callback_before: B,
+        callback_after: A,
+    ) -> ReportWriterWith<'a, W, D, I, B, A> {
         ReportWriterWith::new(
             writer,
             reference_input.as_ref(),
             &self.labels,
             display_range,
-            callback,
+            callback_before,
+            callback_after,
         )
     }
 }
@@ -1123,48 +1145,27 @@ impl<'a, W: Write> ReportWriter<'a, W> {
 impl<W: Write> Iterator for ReportWriter<'_, W> {
     type Item = std::io::Result<()>;
     fn next(&mut self) -> Option<Self::Item> {
-        fn write<W: Write>(
-            writer: &mut W,
-            label: &ReportCaret,
-            reference_input: TokenBuffer,
-            display_range: bool,
-            is_last: bool,
-        ) -> std::io::Result<()> {
-            if display_range {
-                let range = label.range();
-                writeln!(writer, "{:#} [{range:#}]", reference_input)?;
-            } else {
-                writeln!(writer, "{:#}", reference_input)?;
-            }
-            writeln!(writer, "{:#}", label)?;
-            if is_last {
-                // Just add a separator line between
-                writeln!(writer)
-            } else {
-                Ok(())
-            }
-        }
-
         let len = self.report_labels.len();
         if self.index >= len {
             return None;
         }
         let label: &ReportCaret = &self.report_labels[self.index];
-        self.index += 1;
+
         let is_last = len == self.index.sat_add(1);
-        Some(write(
+        self.index += 1;
+
+        Some(ReportLabels::write_single(
             self.writer,
             label,
-            token::TokenBuffer {
-                buffer: self.reference_input,
-            },
+            true,
             self.display_range,
             is_last,
+            self.reference_input,
         ))
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ReportWriterMeta {
     pub total: usize,
     pub index: usize,
@@ -1179,6 +1180,9 @@ impl ReportWriterMeta {
     }
     pub fn index(&self) -> usize {
         self.index
+    }
+    pub fn current(&self) -> usize {
+        self.index.sat_add(1)
     }
     pub fn is_last(&self) -> bool {
         self.is_last
@@ -1196,7 +1200,9 @@ pub struct ReportWriterWith<
     'a,
     W: Write,
     D: Display,
-    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<Option<D>>,
+    I: Display,
+    B: FnMut(ReportWriterMeta) -> Option<D>,
+    A: for<'b> FnMut(Option<&'b io::Error>, ReportWriterMeta) -> Option<I>,
 > {
     writer: &'a mut W,
     reference_input: &'a [Token],
@@ -1204,7 +1210,8 @@ pub struct ReportWriterWith<
     report_labels: &'a [ReportCaret],
     display_range: bool,
 
-    callback: F,
+    callback_before: B,
+    callback_after: A,
 
     _marker: std::marker::PhantomData<D>,
 }
@@ -1212,15 +1219,18 @@ impl<
     'a,
     W: Write,
     D: Display,
-    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<Option<D>>,
-> ReportWriterWith<'a, W, D, F>
+    I: Display,
+    B: FnMut(ReportWriterMeta) -> Option<D>,
+    A: for<'b> FnMut(Option<&'b io::Error>, ReportWriterMeta) -> Option<I>,
+> ReportWriterWith<'a, W, D, I, B, A>
 {
     pub(crate) fn new(
         writer: &'a mut W,
         reference_input: &'a [Token],
         report_labels: &'a [ReportCaret],
         display_range: bool,
-        callback: F,
+        callback_before: B,
+        callback_after: A,
     ) -> Self {
         Self {
             writer,
@@ -1228,7 +1238,8 @@ impl<
             index: 0,
             report_labels,
             display_range,
-            callback,
+            callback_after,
+            callback_before,
             _marker: std::marker::PhantomData,
         }
     }
@@ -1241,34 +1252,14 @@ impl<
     'a,
     W: Write,
     D: Display,
-    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<Option<D>>,
-> Iterator for ReportWriterWith<'a, W, D, F>
+    I: Display,
+    B: FnMut(ReportWriterMeta) -> Option<D>,
+    A: for<'b> FnMut(Option<&'b io::Error>, ReportWriterMeta) -> Option<I>,
+> Iterator for ReportWriterWith<'a, W, D, I, B, A>
 {
     type Item = std::io::Result<()>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        fn write<W: Write>(
-            writer: &mut W,
-            label: &ReportCaret,
-            reference_input: TokenBuffer,
-            display_range: bool,
-            is_last: bool,
-        ) -> std::io::Result<()> {
-            if display_range {
-                let range = label.range();
-                writeln!(writer, "{:#} [{range:#}]", reference_input)?;
-            } else {
-                writeln!(writer, "{:#}", reference_input)?;
-            }
-            writeln!(writer, "{:#}", label)?;
-            if is_last {
-                // Just add a separator line between
-                writeln!(writer)
-            } else {
-                Ok(())
-            }
-        }
-
         let len = self.report_labels.len();
         if self.index >= len {
             return None;
@@ -1282,26 +1273,35 @@ impl<
         };
 
         let label: &ReportCaret = &self.report_labels[self.index];
+
         self.index += 1;
-        let is_last = len == self.index.sat_add(1);
-        let res = write(
+
+        let mut needs_sep = false;
+
+        if let Some(display) = (self.callback_before)(meta) {
+            if let Err(e) = self.writer.write_fmt(format_args!("{display}")) {
+                return Some(Err(e));
+            }
+        } else {
+            needs_sep = true;
+        }
+
+        let res = ReportLabels::write_single(
             self.writer,
             label,
-            token::TokenBuffer {
-                buffer: self.reference_input,
-            },
+            true,
             self.display_range,
-            is_last,
+            // We wanna force no trailing new line here, as that could mess up the users callback
+            !needs_sep,
+            self.reference_input,
         );
 
-        (self.callback)(res, meta)
-            .map(|display| {
-                if let Some(display) = display {
-                    self.writer.write_fmt(format_args!("{display}"))
-                } else {
-                    Ok(())
-                }
-            })
-            .ok()
+        if let Some(display) = (self.callback_after)(res.as_ref().err(), meta) {
+            self.writer
+                .write_fmt(format_args!("{display}"))
+                .map_err(|e| Err::<(), _>(e))
+                .ok()?;
+        }
+        Some(res)
     }
 }

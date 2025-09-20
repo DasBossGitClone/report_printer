@@ -27,14 +27,22 @@ impl Report {
     pub fn into_writer_with<
         'a,
         W: Write,
+        B: FnMut(ReportWriterMeta) -> Option<D>,
+        A: for<'b> FnMut(Option<&'b io::Error>, ReportWriterMeta) -> Option<I>,
         D: Display,
-        F: FnMut(io::Result<()>, ReportWriterMeta) -> io::Result<Option<D>>,
+        I: Display,
     >(
         &'a self,
         writer: &'a mut W,
-        callback: F,
-    ) -> ReportWriterWith<'a, W, D, F> {
-        self.report_labels
-            .into_writer_with(writer, &self.input, self.display_range, callback)
+        callback_before: B,
+        callback_after: A,
+    ) -> ReportWriterWith<'a, W, D, I, B, A> {
+        self.report_labels.into_writer_with(
+            writer,
+            &self.input,
+            self.display_range,
+            callback_before,
+            callback_after,
+        )
     }
 }
