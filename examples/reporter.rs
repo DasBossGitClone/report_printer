@@ -110,14 +110,14 @@ fn write_iter_callback() {
     let mut output = Vec::new();
     let writer = report.into_writer_with(&mut output, |res, meta| {
         res.map(|_| {
-            format!(
+            Some(format!(
                 "Writing part {}/{} (is_first: {}, is_last: {}, is_only: {})\n\n",
                 meta.index + 1,
                 meta.total,
                 meta.is_first,
                 meta.is_last,
                 meta.is_only
-            )
+            ))
         })
     });
 

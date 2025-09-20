@@ -28,7 +28,7 @@ impl Report {
         'a,
         W: Write,
         D: Display,
-        F: FnMut(io::Result<()>, ReportWriterMeta) -> io::Result<D>,
+        F: FnMut(io::Result<()>, ReportWriterMeta) -> io::Result<Option<D>>,
     >(
         &'a self,
         writer: &'a mut W,

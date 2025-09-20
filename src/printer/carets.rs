@@ -1073,7 +1073,7 @@ impl ReportLabels {
         'a,
         W: Write,
         D: Display,
-        F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<D>,
+        F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<Option<D>>,
         A: AsRef<[Token]>,
     >(
         &'a self,
@@ -1172,13 +1172,31 @@ pub struct ReportWriterMeta {
     pub is_first: bool,
     pub is_only: bool,
 }
+// As creation is not pub, we just need methods to ref the values
+impl ReportWriterMeta {
+    pub fn total(&self) -> usize {
+        self.total
+    }
+    pub fn index(&self) -> usize {
+        self.index
+    }
+    pub fn is_last(&self) -> bool {
+        self.is_last
+    }
+    pub fn is_first(&self) -> bool {
+        self.is_first
+    }
+    pub fn is_only(&self) -> bool {
+        self.is_only
+    }
+}
 
 #[derive(Debug)]
 pub struct ReportWriterWith<
     'a,
     W: Write,
     D: Display,
-    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<D>,
+    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<Option<D>>,
 > {
     writer: &'a mut W,
     reference_input: &'a [Token],
@@ -1194,7 +1212,7 @@ impl<
     'a,
     W: Write,
     D: Display,
-    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<D>,
+    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<Option<D>>,
 > ReportWriterWith<'a, W, D, F>
 {
     pub(crate) fn new(
@@ -1223,7 +1241,7 @@ impl<
     'a,
     W: Write,
     D: Display,
-    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<D>,
+    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<Option<D>>,
 > Iterator for ReportWriterWith<'a, W, D, F>
 {
     type Item = std::io::Result<()>;
@@ -1275,8 +1293,15 @@ impl<
             self.display_range,
             is_last,
         );
+
         (self.callback)(res, meta)
-            .map(|display| self.writer.write_fmt(format_args!("{display}")))
+            .map(|display| {
+                if let Some(display) = display {
+                    self.writer.write_fmt(format_args!("{display}"))
+                } else {
+                    Ok(())
+                }
+            })
             .ok()
     }
 }
