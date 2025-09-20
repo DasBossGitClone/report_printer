@@ -4,7 +4,7 @@
     version = "1.3.0"
 
 [features]
-    debug = ["saturating_arithmetic"]
+    debug = ["saturating_arithmetic", "truncate_out_of_bounds"]
     # Enable the use of color in the arrows and carets
     caret_color = []
     # Enable saturating arithmetic for all arithmetic operations.
@@ -23,6 +23,10 @@
     # It is mainly useful for reducing the number of tokens
     # at the cost of some performance
     merging_tokens = ["token/merging_tokens"]
+    # Enable truncation of out of bounds labels
+    # instead of returning an error they will be truncated to fit
+    # within the bounds of the source
+    truncate_out_of_bounds = []
 
 [dependencies]
     derive_more = { version = "2.0.1", features = [

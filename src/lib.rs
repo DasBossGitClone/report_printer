@@ -20,3 +20,6 @@ pub mod config {
     pub use printer::set_arrow_label_padding;
     pub use printer::set_child_label_offset;
 }
+
+#[cfg(feature = "truncate_out_of_bounds")]
+pub use builder::TruncateMode;

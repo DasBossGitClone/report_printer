@@ -103,6 +103,60 @@ impl RangeInclusive {
     pub fn end(&self) -> usize {
         self.end
     }
+
+    pub fn max_end(&self, other: usize) -> Self {
+        if other > self.end {
+            Self {
+                start: self.start,
+                end: other,
+            }
+        } else {
+            *self
+        }
+    }
+
+    pub fn max_start(&self, other: usize) -> Self {
+        if other > self.start {
+            Self {
+                start: other,
+                end: self.end,
+            }
+        } else {
+            *self
+        }
+    }
+
+    pub fn min_end(&self, other: usize) -> Self {
+        if other < self.end {
+            Self {
+                start: self.start,
+                end: other,
+            }
+        } else {
+            *self
+        }
+    }
+
+    pub fn min_start(&self, other: usize) -> Self {
+        if other < self.start {
+            Self {
+                start: other,
+                end: self.end,
+            }
+        } else {
+            *self
+        }
+    }
+
+    #[cfg(feature = "truncate_out_of_bounds")]
+    pub fn truncate_end(&mut self, max: usize) -> bool {
+        if self.end > max {
+            self.end = max;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl Display for RangeInclusive {
@@ -128,6 +182,15 @@ impl FromIterator<usize> for RangeInclusive {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg(feature = "truncate_out_of_bounds")]
+#[repr(u8)]
+pub enum TruncateMode {
+    None,
+    Silent,
+    Indicate,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReportBuilder {
     /// Will only display the relevant part of the input if true
@@ -143,6 +206,8 @@ pub struct ReportBuilder {
     colored_input: bool,
     #[cfg(feature = "caret_color")]
     caret_color: bool,
+    #[cfg(feature = "truncate_out_of_bounds")]
+    truncate_out_of_bounds: TruncateMode,
 }
 
 impl ReportBuilder {
@@ -158,7 +223,15 @@ impl ReportBuilder {
             colored_input: false,
             #[cfg(feature = "caret_color")]
             caret_color: false,
+            #[cfg(feature = "truncate_out_of_bounds")]
+            truncate_out_of_bounds: TruncateMode::Silent,
         }
+    }
+
+    #[cfg(feature = "truncate_out_of_bounds")]
+    pub fn truncate_out_of_bounds<I: Into<TruncateMode>>(mut self, truncate: I) -> Self {
+        self.truncate_out_of_bounds = truncate.into();
+        self
     }
 
     #[cfg(feature = "caret_color")]
@@ -355,6 +428,7 @@ pub enum Error {
     #[error(
         "A label has a range that is out of bounds: {valid:?} not contained within {attempted_range:?}"
     )]
+    #[cfg(not(feature = "truncate_out_of_bounds"))]
     OutOfBounds {
         valid: RangeInclusive,
         attempted_range: RangeInclusive,
@@ -374,14 +448,24 @@ impl ReportBuilder {
         if self.input.is_empty() {
             return Err(Error::EmptyInput);
         }
+
         let valid_range = 0..=self.input.len();
+        #[cfg(feature = "truncate_out_of_bounds")]
+        let mut needs_truncate = false;
         self.labels.iter().try_for_each(|label| {
             if label.range.start() < *valid_range.start() || label.range.end() > *valid_range.end()
             {
-                return Err(Error::OutOfBounds {
-                    attempted_range: label.range.clone(),
-                    valid: valid_range.clone().into(),
-                });
+                #[cfg(not(feature = "truncate_out_of_bounds"))]
+                {
+                    return Err(Error::OutOfBounds {
+                        attempted_range: label.range.clone(),
+                        valid: valid_range.clone().into(),
+                    });
+                }
+                #[cfg(feature = "truncate_out_of_bounds")]
+                {
+                    needs_truncate = true;
+                }
             }
             if label.message.is_empty() {
                 return Err(Error::LabelEmptyMessage);
@@ -399,7 +483,14 @@ impl ReportBuilder {
         let mut input_label_offset = 0;
 
         let input = if self.trim_input {
-            let (trimmed_input, offset) = Report::trim_input(&self.input, self.labels.iter());
+            let (trimmed_input, offset) = Report::trim_input(
+                &self.input,
+                self.labels.iter(),
+                #[cfg(feature = "truncate_out_of_bounds")]
+                {
+                    needs_truncate && self.truncate_out_of_bounds as u8 != 0
+                },
+            );
             input_label_offset = offset;
             trimmed_input
         } else {
@@ -430,20 +521,54 @@ impl ReportBuilder {
                     None
                 };
 
-                TokenizedLabelFull::new_from(
-                    label.range,
+                let stream = {
+                    let mut stream = LineTokenStream::from_str_with_length(
+                        &label.message,
+                        self.max_label_length,
+                    );
+                    if let Some(color) = &label.color {
+                        color.into_iter().for_each(|c| {
+                            stream.on_color_all(*c);
+                        });
+                    }
+                    stream
+                };
+                #[cfg(feature = "truncate_out_of_bounds")]
+                // Avoids needing mut if the feature is not enabled
+                let mut stream = stream;
+
+                #[cfg(not(feature = "truncate_out_of_bounds"))]
+                // Not need for mut here
+                let range = label.range;
+                #[cfg(feature = "truncate_out_of_bounds")]
+                let mut range = label.range;
+                #[cfg(feature = "truncate_out_of_bounds")]
+                {
+                    // Make sure to call "truncate_end" first, as it changes the range
+                    // if its out of bounds
+                    if range.truncate_end(*valid_range.end())
+                        && self.truncate_out_of_bounds == TruncateMode::Indicate
                     {
-                        let mut stream = LineTokenStream::from_str_with_length(
-                            &label.message,
-                            self.max_label_length,
+                        use ::token::{Token, TokenStream};
+
+                        stream.insert_line(
+                            0,
+                            TokenStream::from_iter(
+                                [Token::Styled(
+                                    AnsiStyle::BRIGHT_YELLOW,
+                                    Some(Box::new(Token::Literal(
+                                        "[ Label Range Truncated ]".into(),
+                                    ))),
+                                )]
+                                .into_iter(),
+                            ),
                         );
-                        if let Some(color) = &label.color {
-                            color.into_iter().for_each(|c| {
-                                stream.on_color_all(*c);
-                            });
-                        }
-                        stream
-                    },
+                    }
+                }
+
+                TokenizedLabelFull::new_from(
+                    range,
+                    stream,
                     label.child_labels.clone().into_iter().map(|cl| {
                         #[cfg(feature = "caret_color")]
                         let child_caret_color = if self.caret_color {
@@ -514,9 +639,9 @@ fn srcbuilderrs466a325e875e424bbbc4474ff8735c3a() {
         AnsiStyle::RED,
         Some(Box::new(::token::Token::Literal("Hello".into()))),
     );
-    stream.push(token);
+    stream.push_iter(token);
     let token = ::token::Token::Styled(AnsiStyle::RESET, None);
-    stream.push(token);
+    stream.push_iter(token);
     dbg!(&stream);
     dbg!(format!("{:#}", stream));
 }

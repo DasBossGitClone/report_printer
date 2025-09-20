@@ -94,6 +94,7 @@ fn no_labels() {
     assert_eq!(Error::NoLabels, report.finish().unwrap_err());
 }
 
+#[cfg(not(feature = "truncate_out_of_bounds"))]
 fn out_of_bounds() {
     let mut report = ReportBuilder::new("Short input");
     let label = Label::new(0..20, "Out of bounds label");
@@ -271,6 +272,33 @@ fn multiline_overlapping_labels_colored_input() {
     print!("{}", String::from_utf8_lossy(&output));
 }
 
+#[cfg(feature = "truncate_out_of_bounds")]
+fn out_of_bounds_truncate_silent() {
+    use ::reporter::TruncateMode;
+
+    let mut report =
+        ReportBuilder::new("Short input").truncate_out_of_bounds(TruncateMode::Silent);
+    let label = Label::new(0..20, "Out of bounds label");
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+#[cfg(feature = "truncate_out_of_bounds")]
+fn out_of_bounds_truncate_indicated() {
+    use ::reporter::TruncateMode;
+
+    let mut report =
+        ReportBuilder::new("Short input").truncate_out_of_bounds(TruncateMode::Indicate);
+    let label = Label::new(0..20, "Out of bounds label");
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
 fn main() {
     single_line();
     println!("----------------------------------------");
@@ -285,6 +313,7 @@ fn main() {
     {
         // Functions with not outputs, we dont wanna print a separator for these
         no_labels();
+        #[cfg(not(feature = "truncate_out_of_bounds"))]
         out_of_bounds();
         empty_input();
         empty_label_message();
@@ -313,4 +342,11 @@ fn main() {
     }
     println!("----------------------------------------");
     multiline_overlapping_labels_colored_input();
+    #[cfg(feature = "truncate_out_of_bounds")]
+    {
+        println!("----------------------------------------");
+        out_of_bounds_truncate_silent();
+        println!("----------------------------------------");
+        out_of_bounds_truncate_indicated();
+    }
 }

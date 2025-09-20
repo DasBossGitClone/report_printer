@@ -66,6 +66,49 @@ impl LineTokenStream {
             self.tokens.push(item);
         }
     }
+    #[inline]
+    pub fn insert_line_unchecked<I: Into<TokenStream>>(
+        &mut self,
+        index: usize,
+        item: I,
+    ) -> Option<I> {
+        if index > self.tokens.len() {
+            // Out of bounds
+            return Some(item);
+        }
+        let item: TokenStream = item.into();
+        self.tokens.insert(index, item);
+        None
+    }
+    #[inline]
+    pub fn insert_line<I: Into<TokenStream>>(&mut self, index: usize, item: I) {
+        let item: TokenStream = item.into();
+        if index > self.tokens.len() {
+            // Out of bounds
+            // Just push it to the end
+            self.tokens.push(item);
+        } else {
+            self.tokens.insert(index, item);
+        }
+    }
+
+    #[inline]
+    /// Inserts a token into the specified line at the specified index.
+    ///
+    /// If the line does not exist, returns the item.
+    pub fn insert<I: Into<Token>>(&mut self, line: usize, index: usize, item: I) -> Option<I> {
+        if let Some(line) = self.tokens.get_mut(line) {
+            let item: Token = item.into();
+            // TokenStream already handles safe index insertion
+            line.insert(index, item);
+            None
+        } else {
+            // Line does not exist (out of bounds)
+            // Return the item
+            Some(item)
+        }
+    }
+
     pub fn lines<'a>(&'a self) -> impl Iterator<Item = &'a TokenStream> + 'a {
         self.tokens.iter()
     }
@@ -142,7 +185,7 @@ impl LineTokenStream {
                         if self.tokens.is_empty() {
                             self.tokens.push(TokenStream::new());
                         }
-                        self.tokens.last_mut().unwrap().push(token);
+                        self.tokens.last_mut().unwrap().push_iter(token);
                         if let Some(rem) = rem {
                             line = rem;
                         } else {
@@ -202,7 +245,7 @@ impl LineTokenStream {
                             // Fallback: parse manually
                             loop {
                                 if let Some((token, rem)) = Token::parse_from_str(&part) {
-                                    current_line.push(token);
+                                    current_line.push_iter(token);
                                     if let Some(rem) = rem {
                                         part = rem.to_string();
                                     } else {
@@ -227,7 +270,7 @@ impl LineTokenStream {
                             // Fallback: parse manually
                             loop {
                                 if let Some((token, rem)) = Token::parse_from_str(&part) {
-                                    current_line.push(token);
+                                    current_line.push_iter(token);
                                     if let Some(rem) = rem {
                                         part = rem.to_string();
                                     } else {
@@ -251,7 +294,7 @@ impl LineTokenStream {
                     // Fallback: parse manually
                     loop {
                         if let Some((token, rem)) = Token::parse_from_str(&line) {
-                            current_line.push(token);
+                            current_line.push_iter(token);
                             if let Some(rem) = rem {
                                 line = rem.to_string();
                             } else {

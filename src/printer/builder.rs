@@ -34,16 +34,27 @@ impl Report {
     pub(crate) fn trim_input<'a, A: AsRef<str>>(
         input: A,
         labels: impl Iterator<Item = &'a Label>,
+        #[cfg(feature = "truncate_out_of_bounds")] truncate: bool,
     ) -> (String, usize) {
         let input = input.as_ref();
         let input_len = input.len();
         // Raw start of the first range
         // Raw end of the last range
         let (min_start, max_end) = labels.fold((input_len, 0), |(min_start, max_end), label| {
-            (
-                min_start.min(label.range.start()),
-                max_end.max(label.range.end()),
-            )
+            (min_start.min(label.range.start()), {
+                #[cfg(feature = "truncate_out_of_bounds")]
+                {
+                    if truncate {
+                        max_end.max(label.range.end().min(input_len))
+                    } else {
+                        max_end.max(label.range.end())
+                    }
+                }
+                #[cfg(not(feature = "truncate_out_of_bounds"))]
+                {
+                    max_end.max(label.range.end())
+                }
+            })
         });
 
         // Add 1 word of context on each side if possible

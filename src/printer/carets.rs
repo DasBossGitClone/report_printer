@@ -140,7 +140,7 @@ impl Line {
     pub fn push<I: Into<Token>>(&mut self, token: I) -> &mut Self {
         match self {
             Line::Sep(line) | Line::Underbar(line) | Line::LabelSeq(line) | Line::Label(line) => {
-                line.push(token.into());
+                line.push_iter(token.into());
             }
         }
         self
@@ -366,7 +366,7 @@ impl ReportCaret {
         let mut underbar = TokenStream::new();
         let mut underbar_sep = TokenStream::new();
 
-        underbar.push(Token::Space(self.start));
+        underbar.push_iter(Token::Space(self.start));
 
         let mut last_index = 0;
 
@@ -396,8 +396,8 @@ impl ReportCaret {
             {
                 last_color = None
             };
-            underbar.push(Token::HCaret(sep).try_with_coloring_feature(last_color));
-            underbar.push(Token::HDown.try_with_coloring_feature(last_color));
+            underbar.push_iter(Token::HCaret(sep).try_with_coloring_feature(last_color));
+            underbar.push_iter(Token::HDown.try_with_coloring_feature(last_color));
             last_index = pos.sat_add(1);
 
             if let Some(next) = self.iter().rev().nth(i.sat_add(1)) {
@@ -407,12 +407,12 @@ impl ReportCaret {
 
                 // We add 2, as we need to cover the HDown and the position of the next label
                 let next_sep = next_pos.saturating_sub(last_index.sat_add(2));
-                underbar.push(Token::HCaret(next_sep).try_with_coloring_feature(last_color));
+                underbar.push_iter(Token::HCaret(next_sep).try_with_coloring_feature(last_color));
                 last_index += next_sep;
             }
         }
         if last_index < self.end.saturating_sub(self.start) {
-            underbar.push(
+            underbar.push_iter(
                 Token::HCaret(
                     self.end
                         .saturating_sub(self.start)
@@ -424,7 +424,7 @@ impl ReportCaret {
 
         lines.push(Line::Underbar(underbar));
 
-        underbar_sep.push(Token::Space(self.start));
+        underbar_sep.push_iter(Token::Space(self.start));
 
         let mut last_index = 0;
 
@@ -449,12 +449,12 @@ impl ReportCaret {
             #[cfg(not(feature = "caret_color"))]
             let label_caret_color: Option<&RgbColor> = None;
 
-            underbar_sep.push(Token::Space(sep));
-            underbar_sep.push(Token::VCaret.try_with_coloring_feature(label_caret_color));
+            underbar_sep.push_iter(Token::Space(sep));
+            underbar_sep.push_iter(Token::VCaret.try_with_coloring_feature(label_caret_color));
             last_index = pos.sat_add(1);
         }
         if last_index < self.end.saturating_sub(self.start) {
-            underbar_sep.push(Token::Space(
+            underbar_sep.push_iter(Token::Space(
                 self.end
                     .saturating_sub(self.start)
                     .saturating_sub(last_index),
@@ -469,7 +469,7 @@ impl ReportCaret {
         while !self.is_empty() {
             // First generate the main line
             let mut label_line = TokenStream::new();
-            label_line.push(Token::Space(self.start));
+            label_line.push_iter(Token::Space(self.start));
 
             let mut current_pos = 0;
 
@@ -489,9 +489,9 @@ impl ReportCaret {
 
                 // Insert spaces until we reach the next position, if its the first position, else we draw H_CARET
                 if i == 0 {
-                    label_line.push(Token::Space(pos.saturating_sub(current_pos)));
+                    label_line.push_iter(Token::Space(pos.saturating_sub(current_pos)));
                 } else {
-                    label_line.push(
+                    label_line.push_iter(
                         Token::HCaret(pos.saturating_sub(current_pos))
                             .try_with_coloring_feature(label_color),
                     );
@@ -517,10 +517,8 @@ impl ReportCaret {
 
                     #[cfg(not(feature = "merge_overlap"))]
                     {
-                        label_line.push([
-                            Token::UpRight.try_with_coloring_feature(label_color),
-                            Token::HCaret(1).try_with_coloring_feature(label_color),
-                        ]);
+                        label_line.push(Token::UpRight.try_with_coloring_feature(label_color));
+                        label_line.push(Token::HCaret(1).try_with_coloring_feature(label_color));
                     }
                 } else {
                     #[cfg(feature = "merge_overlap")]
@@ -550,18 +548,54 @@ impl ReportCaret {
             } = last;
             if child_labels.is_empty() {
                 // We can print a short arrow
-                for line in message.into_iter() {
-                    let mut label_line = label_line.clone();
-                    label_line.push([
-                        if line.is_only() {
+                if message.is_multi_line() {
+                    let mut message = message.into_iter();
+
+                    let first = message.next().unwrap();
+                    let is_only = first.is_only();
+                    let mut line = label_line.clone();
+                    line.push_iter([
+                        if is_only {
                             Token::LArrow
                         } else {
                             Token::VCaret
                         },
                         Token::Space(ARROR_LABEL_PADDING_REF),
                     ]);
-                    label_line.extend(line);
-                    lines.push(Line::Label(label_line));
+                    line.extend(first);
+                    lines.push(Line::Label(line));
+
+                    if let Some(Token::Styled(_, label_line_transition)) = label_line.r_get_mut(2) {
+                        *label_line_transition = Some(Box::new(Token::Space(1)));
+                    } else {
+                        let _ = label_line.pop();
+                        let _ = label_line.pop();
+                        label_line.push(Token::Space(2));
+                    }
+                    label_line.push_iter([Token::VCaret, Token::Space(ARROR_LABEL_PADDING_REF)]);
+
+                    for line in message {
+                        let mut label_line = (&label_line).clone();
+
+                        // We want a space for multiline labels, to indicate that there are more lines
+                        label_line.push(Token::Space(ARROR_LABEL_PADDING_REF.sat_add(1)));
+                        label_line.extend(line);
+                        lines.push(Line::Label(label_line));
+                    }
+                } else {
+                    for line in message.into_iter() {
+                        let mut label_line = (&label_line).clone();
+                        label_line.push_iter([
+                            if line.is_only() {
+                                Token::LArrow
+                            } else {
+                                Token::VCaret
+                            },
+                            Token::Space(ARROR_LABEL_PADDING_REF),
+                        ]);
+                        label_line.extend(line);
+                        lines.push(Line::Label(label_line));
+                    }
                 }
             } else {
                 #[cfg(feature = "caret_color")]
@@ -595,20 +629,20 @@ impl ReportCaret {
                             .saturating_add(3)
                             .saturating_add(self.start);
                         if target_pos > current_pos {
-                            sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
+                            sep.push_iter(Token::Space(target_pos.saturating_sub(current_pos)));
                         }
                     } else {
                         let target_pos = current_pos
                             // 2 for the arrow-transition
                             .saturating_add(2);
                         if target_pos > current_pos {
-                            sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
+                            sep.push_iter(Token::Space(target_pos.saturating_sub(current_pos)));
                         }
                     }
 
                     let mut message = message.into_iter();
                     if let Some(line) = message.next() {
-                        label_line.push([
+                        label_line.push_iter([
                             pcc(Token::HCaret(1)),
                             pcc(Token::HDown),
                             pcc(Token::HCaret(2)),
@@ -620,7 +654,7 @@ impl ReportCaret {
 
                         for line in message {
                             let mut label_line = sep.clone();
-                            label_line.push([
+                            label_line.push_iter([
                                 pcc(Token::VCaret),
                                 Token::Space(2),
                                 pcc(Token::VCaret),
@@ -634,7 +668,7 @@ impl ReportCaret {
                         panic!("Message is multi-line, but has no lines");
                     }
                 } else {
-                    label_line.push([
+                    label_line.push_iter([
                         pcc(Token::HCaret(1)),
                         pcc(Token::HDown),
                         pcc(Token::HCaret(2)),
@@ -663,19 +697,19 @@ impl ReportCaret {
                         .saturating_add(3)
                         .saturating_add(self.start);
                     if target_pos > current_pos {
-                        child_sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
+                        child_sep.push_iter(Token::Space(target_pos.saturating_sub(current_pos)));
                     }
                 } else {
                     let target_pos = current_pos
                         // 2 for the arrow-transition
                         .saturating_add(2);
                     if target_pos > current_pos {
-                        child_sep.push(Token::Space(target_pos.saturating_sub(current_pos)));
+                        child_sep.push_iter(Token::Space(target_pos.saturating_sub(current_pos)));
                     }
                 }
                 // We wanna clone it here, as this is the separator for all child labels
                 let mut child_sep_with_caret = child_sep.clone();
-                child_sep_with_caret.push(pcc(Token::VCaret));
+                child_sep_with_caret.push_iter(pcc(Token::VCaret));
                 lines.push(Line::Sep(child_sep_with_caret.clone()));
                 let child_labels_len = child_labels.len();
                 for (i, child) in child_labels.into_iter().enumerate() {
@@ -710,7 +744,7 @@ impl ReportCaret {
                         ) {
                             // Only line in the last child label
                             (true, true, true) => {
-                                child_line.push([
+                                child_line.push_iter([
                                     ccc(Token::UpRight),
                                     ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF.sat_add(2))),
                                     ccc(Token::LArrow),
@@ -719,7 +753,7 @@ impl ReportCaret {
                             }
                             // Only line in label-child, but not the last child label
                             (true, false, true) => {
-                                child_line.push([
+                                child_line.push_iter([
                                     pcc(Token::VRight),
                                     ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF.sat_add(2))),
                                     ccc(Token::LArrow),
@@ -728,7 +762,7 @@ impl ReportCaret {
                             }
                             // First line but not last in label-child, not last child label
                             (true, true, false) => {
-                                child_line.push([
+                                child_line.push_iter([
                                     pcc(Token::UpRight),
                                     ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF.sat_add(2))),
                                     ccc(Token::VLeft),
@@ -737,7 +771,7 @@ impl ReportCaret {
                             }
                             // First line but not last in label-child, last child label
                             (true, false, false) => {
-                                child_line.push([
+                                child_line.push_iter([
                                     pcc(Token::VRight),
                                     ccc(Token::HCaret(CHILD_LABEL_OFFSET_DEREF.sat_add(2))),
                                     ccc(Token::VLeft),
@@ -746,7 +780,7 @@ impl ReportCaret {
                             }
                             // not last Child label, but not the only line
                             (_, false, false) => {
-                                child_line.push([
+                                child_line.push_iter([
                                     // We do not wanna style the first caret, as it is the continuation of the parent label
                                     Token::VCaret,
                                     Token::Space(CHILD_LABEL_OFFSET_DEREF.sat_add(2)),
@@ -757,7 +791,7 @@ impl ReportCaret {
                             }
                             // Last Child label, but not the only line
                             (_, true, false) => {
-                                child_line.push([
+                                child_line.push_iter([
                                     // We need to add an extra space here, as there are not more child labels, thus no carets which would offset the line
                                     Token::Space(CHILD_LABEL_OFFSET_DEREF.sat_add(3)),
                                     ccc(Token::VCaret),
@@ -766,7 +800,7 @@ impl ReportCaret {
                                 ]);
                             }
                             (_, _, true) => {
-                                child_line.push([Token::VCaret, Token::Space(5)]);
+                                child_line.push_iter([Token::VCaret, Token::Space(5)]);
                                 eprintln!(
                                     "{RED} This should never happen, how the fuck could this even be possible?! {RESET}"
                                 );
@@ -802,7 +836,7 @@ impl ReportCaret {
             return None;
         }
         let mut sep: TokenStream = TokenStream::new();
-        sep.push(Token::Space(self.start));
+        sep.push_iter(Token::Space(self.start));
         let mut current_pos = 0;
 
         #[cfg(feature = "merge_overlap")]
@@ -820,13 +854,13 @@ impl ReportCaret {
             }
 
             // Insert spaces until we reach the next position
-            sep.push(Token::Space(pos.saturating_sub(current_pos)));
+            sep.push_iter(Token::Space(pos.saturating_sub(current_pos)));
             current_pos = pos.sat_add(1);
             #[cfg(feature = "caret_color")]
             sep.push(Token::VCaret.try_with_coloring_feature(label.ref_label_color()));
 
             #[cfg(not(feature = "caret_color"))]
-            sep.push(Token::VCaret);
+            sep.push_iter(Token::VCaret);
         }
         Some(Line::Sep(sep))
     }

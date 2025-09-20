@@ -72,7 +72,7 @@ impl TokenStream {
     pub fn on_color<I: Into<AnsiStyle>>(&mut self, style: I) {
         if let Some(first) = self.tokens.first_mut() {
             *first = Token::Styled(style.into(), Some(Box::new(first.clone())));
-            self.push(Token::Reset);
+            self.push_iter(Token::Reset);
         }
     }
     pub fn with_color<I: Into<AnsiStyle>>(mut self, style: I) -> Self {
@@ -80,7 +80,31 @@ impl TokenStream {
         self
     }
 
-    pub fn push<T: Into<Token>, I: IntoIterator<Item = T>>(&mut self, item: I) {
+    /// Get a mutable reference to the token at the given index, counting from the end.
+    pub fn r_get_mut(&mut self, index: usize) -> Option<&mut Token> {
+        let len = self.tokens.len();
+        if index >= len {
+            None
+        } else {
+            self.tokens.get_mut(len - 1 - index)
+        }
+    }
+
+    pub fn push<T: Into<Token>>(&mut self, item: T) {
+        // Try to merge the item with the last token
+        let item: Token = item.into();
+        if let Some(last) = self.tokens.last_mut() {
+            if let Some(unmerged) = last.merge(item) {
+                // Not merged
+                self.tokens.push(unmerged);
+            }
+            // Merged
+        } else {
+            self.tokens.push(item);
+        }
+    }
+
+    pub fn push_iter<T: Into<Token>, I: IntoIterator<Item = T>>(&mut self, item: I) {
         // Try to merge the iterator via fold
         let result = item
             .into_iter()
@@ -123,7 +147,7 @@ impl TokenStream {
                     // Try to merge with the last token
                     if let Some(tkn) = last_tkn.merge(token) {
                         // Push the non-mergeable token
-                        self.push(last_tkn);
+                        self.push_iter(last_tkn);
                         // Set the last_token to the new token
                         last_token = Some(tkn);
                     }
@@ -141,7 +165,7 @@ impl TokenStream {
             }
         }
         if let Some(tkn) = last_token {
-            self.push(tkn);
+            self.push_iter(tkn);
         }
         true
     }
@@ -154,7 +178,7 @@ impl TokenStream {
             for inner in iter {
                 if let Some(merged) = outer.merge(inner) {
                     // Push the non-mergeable token
-                    self.push(outer);
+                    self.push_iter(outer);
                     outer = merged;
                     outer_needs_push = true;
                 } else {
@@ -163,7 +187,30 @@ impl TokenStream {
                 // Merged. As "merge" takes a mutable reference, we dont need to do anything
             }
             if outer_needs_push {
-                self.push(outer);
+                self.push_iter(outer);
+            }
+        }
+    }
+
+    pub fn insert<T: Into<Token>>(&mut self, index: usize, item: T) {
+        let mut item = item.into();
+        if index >= self.tokens.len() {
+            self.push_iter(item);
+        } else {
+            if let Some(last) = self.tokens.get_mut(index.saturating_sub(1)) {
+                if let Some(unmerged) = last.merge(item) {
+                    // Not merged
+                    self.tokens.insert(index, unmerged);
+                }
+                // Merged
+            } else if let Some(next) = self.tokens.get_mut(index) {
+                if let Some(unmerged) = item.merge(next.clone()) {
+                    // Not merged
+                    self.tokens.insert(index, unmerged);
+                }
+                // Merged
+            } else {
+                self.tokens.insert(index, item);
             }
         }
     }
@@ -204,6 +251,14 @@ impl<A: AsRef<str>> From<A> for TokenStream {
     fn from(value: A) -> Self {
         let mut stream = TokenStream::new();
         stream.push_str(value.as_ref());
+        stream
+    }
+}
+
+impl FromIterator<Token> for TokenStream {
+    fn from_iter<T: IntoIterator<Item = Token>>(iter: T) -> Self {
+        let mut stream = TokenStream::new();
+        stream.extend(iter);
         stream
     }
 }
