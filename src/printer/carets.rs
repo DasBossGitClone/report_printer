@@ -24,7 +24,7 @@ pub fn set_child_label_offset(offset: usize) {
 crate::impl_field!(
     ReportCaret,start,usize;
     ReportCaret,end,usize;
-    ReportCaret,r_positions,Vec<ReportLabel>;
+    ReportCaret,rev_positions,Vec<ReportLabel>;
     ReportLabel,position,usize;
     ReportLabel,message,TokenizedLabel;
     ReportLabel,child_labels,Vec<TokenizedChildLabel>;
@@ -174,7 +174,7 @@ pub struct ReportCaret {
     /// Relative to start
     /// Reversed, so that popping gets the leftmost position first
     #[into_iterator]
-    r_positions: Vec<ReportLabel>,
+    rev_positions: Vec<ReportLabel>,
 }
 impl PartialEq for ReportCaret {
     fn eq(&self, other: &Self) -> bool {
@@ -192,12 +192,12 @@ impl Ord for ReportCaret {
         self.start
             .cmp(&other.start)
             .then(self.end.cmp(&other.end))
-            .then(self.r_positions.len().cmp(&other.r_positions.len()))
+            .then(self.rev_positions.len().cmp(&other.rev_positions.len()))
             .then_with(|| {
-                self.r_positions
+                self.rev_positions
                     .iter()
                     .rev()
-                    .zip(other.r_positions.iter().rev())
+                    .zip(other.rev_positions.iter().rev())
                     .find_map(|(a, b)| {
                         let ord = a.cmp(b);
                         if ord == std::cmp::Ordering::Equal {
@@ -212,21 +212,21 @@ impl Ord for ReportCaret {
 }
 
 impl ReportCaret {
-    pub(super) fn new(start: usize, end: usize, mut r_positions: Vec<ReportLabel>) -> Self {
-        r_positions.sort_by(|a, b| a.cmp(b));
-        r_positions.dedup();
-        r_positions.reverse();
+    pub(super) fn new(start: usize, end: usize, mut rev_positions: Vec<ReportLabel>) -> Self {
+        rev_positions.sort_by(|a, b| a.cmp(b));
+        rev_positions.dedup();
+        rev_positions.reverse();
         Self {
             start,
             end,
-            r_positions,
+            rev_positions,
         }
     }
     pub fn range(&self) -> RangeInclusive {
         (self.start..=self.end).into()
     }
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &ReportLabel> {
-        self.r_positions.iter()
+        self.rev_positions.iter()
     }
     /// Adds a label to the caret report at the correct position
     ///
@@ -245,13 +245,13 @@ impl ReportCaret {
                     .position()
                     .saturating_add(label.length.saturating_sub(1)),
             );
-            self.r_positions.push(label.into());
+            self.rev_positions.push(label.into());
         } else {
-            self.r_positions.push(label.into());
+            self.rev_positions.push(label.into());
         }
-        self.r_positions.sort_by(|a, b| a.cmp(b));
-        self.r_positions.dedup();
-        self.r_positions.reverse();
+        self.rev_positions.sort_by(|a, b| a.cmp(b));
+        self.rev_positions.dedup();
+        self.rev_positions.reverse();
     }
     /// Adds a label to the caret report at the correct position
     ///
@@ -273,19 +273,19 @@ impl ReportCaret {
                     .position()
                     .saturating_add(label.length.saturating_sub(1)),
             );
-            self.r_positions.push(label.into());
+            self.rev_positions.push(label.into());
         } else {
-            self.r_positions.push(label.into());
+            self.rev_positions.push(label.into());
         }
     }
     pub fn pop(&mut self) -> Option<ReportLabel> {
-        self.r_positions.pop()
+        self.rev_positions.pop()
     }
     pub fn is_empty(&self) -> bool {
-        self.r_positions.is_empty()
+        self.rev_positions.is_empty()
     }
     pub fn len(&self) -> usize {
-        self.r_positions.len()
+        self.rev_positions.len()
     }
     pub(super) fn get_underbar_ranges(&self) -> Vec<(usize, usize, Option<RgbColor>)> {
         if self.is_empty() {
@@ -537,7 +537,7 @@ impl ReportCaret {
                 }
             }
             // pop the position, so we dont print it again in the separator line
-            let last = self.r_positions.pop().unwrap();
+            let last = self.rev_positions.pop().unwrap();
 
             // Write the label
             let ReportLabel {
@@ -572,13 +572,14 @@ impl ReportCaret {
                         let _ = label_line.pop();
                         label_line.push(Token::Space(2));
                     }
-                    label_line.push_iter([Token::VCaret, Token::Space(ARROR_LABEL_PADDING_REF)]);
+                    // We want a space for multiline labels, to indicate that there are more lines
+                    label_line.push_iter([
+                        Token::VCaret,
+                        Token::Space(ARROR_LABEL_PADDING_REF.sat_add(1)),
+                    ]);
 
                     for line in message {
                         let mut label_line = (&label_line).clone();
-
-                        // We want a space for multiline labels, to indicate that there are more lines
-                        label_line.push(Token::Space(ARROR_LABEL_PADDING_REF.sat_add(1)));
                         label_line.extend(line);
                         lines.push(Line::Label(label_line));
                     }

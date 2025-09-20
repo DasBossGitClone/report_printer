@@ -276,8 +276,7 @@ fn multiline_overlapping_labels_colored_input() {
 fn out_of_bounds_truncate_silent() {
     use ::reporter::TruncateMode;
 
-    let mut report =
-        ReportBuilder::new("Short input").truncate_out_of_bounds(TruncateMode::Silent);
+    let mut report = ReportBuilder::new("Short input").truncate_out_of_bounds(TruncateMode::Silent);
     let label = Label::new(0..20, "Out of bounds label");
     report.push(label);
     let report = report.finish().unwrap();
@@ -299,7 +298,22 @@ fn out_of_bounds_truncate_indicated() {
     print!("{}", String::from_utf8_lossy(&output));
 }
 
+fn very_long_label() {
+    let mut report = ReportBuilder::new("Short input");
+    let label = Label::new(
+        0..5,
+        "This is a very long label message that exceeds the input length significantly",
+    );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
 fn main() {
+    very_long_label();
+    println!("----------------------------------------");
     single_line();
     println!("----------------------------------------");
     multi_line_label_and_childlabel();

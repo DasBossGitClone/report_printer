@@ -235,7 +235,6 @@ impl LineTokenStream {
                     if break_at > max_line_length {
                         // We need to break with a hyphen
                         let (part, rem) = line.split_at(max_line_length.sat_sub(1));
-                        let rem = rem.trim_start().to_string();
                         // Add a hyphen to the part
                         let mut part = part.to_string();
                         part.push('-');
@@ -258,11 +257,10 @@ impl LineTokenStream {
                         }
                         stream.push_new(current_line);
                         current_line = TokenStream::new();
-                        line = rem.to_string();
+                        line = rem.trim_start().to_string();
                     } else {
                         // We can break at whitespace
                         let (part, rem) = line.split_at(break_at);
-                        let rem = rem.trim_start().to_string();
                         let mut part = part.trim_end().to_string();
                         if let Ok(line_stream) = TokenStream::from_str(&part) {
                             current_line.extend(line_stream);
@@ -305,6 +303,9 @@ impl LineTokenStream {
                         }
                     }
                 }
+            }
+            if current_line.is_empty() {
+                continue;
             }
             stream.push_new(current_line);
             current_line = TokenStream::new();
