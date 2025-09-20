@@ -1,8 +1,6 @@
 use ::std::usize;
 
-use ::reporter::{
-    AnsiStyle, ChildLabel, Error, Label, RangeInclusive, ReportBuilder, Trim, TrimPadding,
-};
+use ::reporter::{AnsiStyle, ChildLabel, Error, Label, ReportBuilder, Trim, TrimPadding};
 
 fn single_line() {
     let mut report = ReportBuilder::new("Longer Test - Another test input");
