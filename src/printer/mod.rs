@@ -24,4 +24,17 @@ impl Report {
         self.report_labels
             .into_writer(writer, &self.input, self.display_range)
     }
+    pub fn into_writer_with<
+        'a,
+        W: Write,
+        D: Display,
+        F: FnMut(io::Result<()>, ReportWriterMeta) -> io::Result<D>,
+    >(
+        &'a self,
+        writer: &'a mut W,
+        callback: F,
+    ) -> ReportWriterWith<'a, W, D, F> {
+        self.report_labels
+            .into_writer_with(writer, &self.input, self.display_range, callback)
+    }
 }

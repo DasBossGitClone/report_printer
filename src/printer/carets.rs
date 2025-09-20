@@ -1069,6 +1069,27 @@ impl ReportLabels {
             display_range,
         )
     }
+    pub fn into_writer_with<
+        'a,
+        W: Write,
+        D: Display,
+        F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<D>,
+        A: AsRef<[Token]>,
+    >(
+        &'a self,
+        writer: &'a mut W,
+        reference_input: &'a A,
+        display_range: bool,
+        callback: F,
+    ) -> ReportWriterWith<'a, W, D, F> {
+        ReportWriterWith::new(
+            writer,
+            reference_input.as_ref(),
+            &self.labels,
+            display_range,
+            callback,
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -1140,5 +1161,122 @@ impl<W: Write> Iterator for ReportWriter<'_, W> {
             self.display_range,
             is_last,
         ))
+    }
+}
+
+#[derive(Debug)]
+pub struct ReportWriterMeta {
+    pub total: usize,
+    pub index: usize,
+    pub is_last: bool,
+    pub is_first: bool,
+    pub is_only: bool,
+}
+
+#[derive(Debug)]
+pub struct ReportWriterWith<
+    'a,
+    W: Write,
+    D: Display,
+    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<D>,
+> {
+    writer: &'a mut W,
+    reference_input: &'a [Token],
+    index: usize,
+    report_labels: &'a [ReportCaret],
+    display_range: bool,
+
+    callback: F,
+
+    _marker: std::marker::PhantomData<D>,
+}
+impl<
+    'a,
+    W: Write,
+    D: Display,
+    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<D>,
+> ReportWriterWith<'a, W, D, F>
+{
+    pub(crate) fn new(
+        writer: &'a mut W,
+        reference_input: &'a [Token],
+        report_labels: &'a [ReportCaret],
+        display_range: bool,
+        callback: F,
+    ) -> Self {
+        Self {
+            writer,
+            reference_input,
+            index: 0,
+            report_labels,
+            display_range,
+            callback,
+            _marker: std::marker::PhantomData,
+        }
+    }
+    pub fn write(mut self) -> std::io::Result<()> {
+        self.try_for_each(|res| res)
+    }
+}
+
+impl<
+    'a,
+    W: Write,
+    D: Display,
+    F: FnMut(std::io::Result<()>, ReportWriterMeta) -> std::io::Result<D>,
+> Iterator for ReportWriterWith<'a, W, D, F>
+{
+    type Item = std::io::Result<()>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        fn write<W: Write>(
+            writer: &mut W,
+            label: &ReportCaret,
+            reference_input: TokenBuffer,
+            display_range: bool,
+            is_last: bool,
+        ) -> std::io::Result<()> {
+            if display_range {
+                let range = label.range();
+                writeln!(writer, "{:#} [{range:#}]", reference_input)?;
+            } else {
+                writeln!(writer, "{:#}", reference_input)?;
+            }
+            writeln!(writer, "{:#}", label)?;
+            if is_last {
+                // Just add a separator line between
+                writeln!(writer)
+            } else {
+                Ok(())
+            }
+        }
+
+        let len = self.report_labels.len();
+        if self.index >= len {
+            return None;
+        }
+        let meta = ReportWriterMeta {
+            total: len,
+            index: self.index,
+            is_last: len == self.index.sat_add(1),
+            is_first: self.index == 0,
+            is_only: len == 1,
+        };
+
+        let label: &ReportCaret = &self.report_labels[self.index];
+        self.index += 1;
+        let is_last = len == self.index.sat_add(1);
+        let res = write(
+            self.writer,
+            label,
+            token::TokenBuffer {
+                buffer: self.reference_input,
+            },
+            self.display_range,
+            is_last,
+        );
+        (self.callback)(res, meta)
+            .map(|display| self.writer.write_fmt(format_args!("{display}")))
+            .ok()
     }
 }

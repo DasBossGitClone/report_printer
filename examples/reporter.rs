@@ -91,6 +91,43 @@ fn write_iter() {
     print!("{}", String::from_utf8_lossy(&output));
 }
 
+fn write_iter_callback() {
+    let mut report = ReportBuilder::new("Longer Test - Another test input");
+    let label = Label::new(22..=26, "Overlapping label")
+        .with_child_label(ChildLabel::new("Child label X").with_color(AnsiStyle::ITALIC))
+        .with_child_label(
+            ChildLabel::new("Child label Y")
+                //.with_color(AnsiStyle::UNDERLINE)
+                .with_color(AnsiStyle::CYAN)
+                .with_color(AnsiStyle::BOLD),
+        );
+    report.push(label);
+    let label = Label::new(5..=14, "This is a test label\nwith more than one line")
+        .with_child_label(ChildLabel::new("This is a child label\nwith two lines"))
+        .with_child_label(ChildLabel::new("This is another child label"));
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    let writer = report.into_writer_with(&mut output, |res, meta| {
+        res.map(|_| {
+            format!(
+                "Writing part {}/{} (is_first: {}, is_last: {}, is_only: {})\n\n",
+                meta.index + 1,
+                meta.total,
+                meta.is_first,
+                meta.is_last,
+                meta.is_only
+            )
+        })
+    });
+
+    for res in writer {
+        res.expect("Failed to write report");
+    }
+
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
 fn no_labels() {
     let report = ReportBuilder::new("This is a test input string").with_range();
     assert_eq!(Error::NoLabels, report.finish().unwrap_err());
@@ -446,4 +483,6 @@ fn main() {
         println!("----------------------------------------");
         out_of_bounds_truncate_indicated();
     }
+    println!("----------------------------------------");
+    write_iter_callback();
 }
