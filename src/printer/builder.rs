@@ -31,9 +31,10 @@ impl Report {
 }
 
 impl Report {
-    pub(crate) fn trim_input<'a, A: AsRef<str>>(
+    fn trim_input_by_words<'a, A: AsRef<str>>(
         input: A,
         labels: impl Iterator<Item = &'a Label>,
+        bounds: TrimPadding,
         #[cfg(feature = "truncate_out_of_bounds")] truncate: bool,
     ) -> (String, usize) {
         let input = input.as_ref();
@@ -57,17 +58,19 @@ impl Report {
             })
         });
 
+        let TrimPadding { front, back } = bounds;
+
         // Add 1 word of context on each side if possible
 
         let min_start_padded = input[..min_start]
             .find_rev_iter(" ")
-            .nth(1)
+            .nth(front)
             .map(|pos| pos.sat_add(1))
             .unwrap_or(0);
 
         let max_end_padded = input[max_end..]
             .find_iter(" ")
-            .nth(1)
+            .nth(back)
             .map(|pos| max_end.sat_add(pos))
             .unwrap_or(input_len);
 
@@ -104,6 +107,99 @@ impl Report {
             format!("{pre}{}", &input[min_start_padded..])
         };
         (trimmed_input, min_start_padded)
+    }
+    fn trim_input_by_chars<'a, A: AsRef<str>>(
+        input: A,
+        labels: impl Iterator<Item = &'a Label>,
+        bounds: TrimPadding,
+        #[cfg(feature = "truncate_out_of_bounds")] truncate: bool,
+    ) -> (String, usize) {
+        let input = input.as_ref();
+        let input_len = input.len();
+        // Raw start of the first range
+        // Raw end of the last range
+        let (min_start, max_end) = labels.fold((input_len, 0), |(min_start, max_end), label| {
+            (min_start.min(label.range.start()), {
+                #[cfg(feature = "truncate_out_of_bounds")]
+                {
+                    if truncate {
+                        max_end.max(label.range.end().min(input_len))
+                    } else {
+                        max_end.max(label.range.end())
+                    }
+                }
+                #[cfg(not(feature = "truncate_out_of_bounds"))]
+                {
+                    max_end.max(label.range.end())
+                }
+            })
+        });
+
+        let TrimPadding { front, back } = bounds;
+
+        // Add `front` chars of context on the left if possible
+        let min_start_padded = min_start.saturating_sub(front);
+        // Add `back` chars of context on the right if possible
+        let max_end_padded = (max_end + back).min(input_len);
+
+        // Ensure we don't go out of bounds
+        let trimmed_input = if max_end_padded < input_len {
+            let pre = if min_start_padded > 0 {
+                // As we "prepend" with 4 chars, we need to update the offset accordingly
+                "... "
+            } else {
+                ""
+            };
+            let post = if max_end_padded < input_len {
+                " ..."
+            } else {
+                ""
+            };
+            format!("{pre}{}{post}", &input[min_start_padded..max_end_padded])
+        } else if max_end < input_len {
+            let pre = if min_start_padded > 0 {
+                // As we "prepend" with 4 chars, we need to update the offset accordingly
+                "... "
+            } else {
+                ""
+            };
+            format!("{pre}{}", &input[min_start_padded..])
+        } else {
+            // Just in case. This case should not be possible, but better safe than sorry
+            let pre = if min_start_padded > 0 {
+                // As we "prepend" with 4 chars, we need to update the offset accordingly
+                "... "
+            } else {
+                ""
+            };
+            format!("{pre}{}", &input[min_start_padded..])
+        };
+        (trimmed_input, min_start_padded)
+    }
+
+    pub(crate) fn trim_input<'a, A: AsRef<str>>(
+        input: A,
+        labels: impl Iterator<Item = &'a Label>,
+        bounds: Trim,
+        #[cfg(feature = "truncate_out_of_bounds")] truncate: bool,
+    ) -> (String, usize) {
+        match bounds {
+            Trim::Words(padding) => Self::trim_input_by_words(
+                input,
+                labels,
+                padding,
+                #[cfg(feature = "truncate_out_of_bounds")]
+                truncate,
+            ),
+            Trim::Chars(padding) => Self::trim_input_by_chars(
+                input,
+                labels,
+                padding,
+                #[cfg(feature = "truncate_out_of_bounds")]
+                truncate,
+            ),
+            Trim::None => (input.as_ref().to_string(), 0),
+        }
     }
 }
 

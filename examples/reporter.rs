@@ -311,7 +311,40 @@ fn very_long_label() {
     print!("{}", String::from_utf8_lossy(&output));
 }
 
+fn very_long_input_trimmed_long() {
+    let mut report =
+        ReportBuilder::new("Very long input that should be trimmed to show only relevant parts")
+            .trim_input_padded((2, 2));
+    let label = Label::new(
+        10..=15,
+        "This is a very long label message that exceeds the input length significantly",
+    );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+fn very_long_input_trimmed_tight() {
+    let mut report =
+        ReportBuilder::new("Very long input that should be trimmed to show only relevant parts")
+            .trim_input_padded((0, 0));
+    let label = Label::new(
+        10..=15,
+        "This is a very long label message that exceeds the input length significantly",
+    );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+
 fn main() {
+    very_long_input_trimmed_long();
+    println!("----------------------------------------");
+    very_long_input_trimmed_tight();
+    println!("----------------------------------------");
     very_long_label();
     println!("----------------------------------------");
     single_line();

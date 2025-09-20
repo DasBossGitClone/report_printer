@@ -191,10 +191,53 @@ pub enum TruncateMode {
     Indicate,
 }
 
+#[cfg(feature = "truncate_out_of_bounds")]
+impl<I: Into<bool>> From<I> for TruncateMode {
+    fn from(value: I) -> Self {
+        if value.into() {
+            Self::Indicate
+        } else {
+            Self::Silent
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum Trim {
+    None,
+    Words(TrimPadding),
+    Chars(TrimPadding),
+}
+impl Default for Trim {
+    fn default() -> Self {
+        Self::Words(TrimPadding::default())
+    }
+}
+
+impl<I: Into<TrimPadding>> From<I> for Trim {
+    fn from(padding: I) -> Self {
+        Self::Words(padding.into())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::From)]
+pub struct TrimPadding {
+    /// The amount of words (bound by whitespace) to include before the first label
+    pub(crate) front: usize,
+    /// The amount of words (bound by whitespace) to include after the last label
+    pub(crate) back: usize,
+}
+impl Default for TrimPadding {
+    fn default() -> Self {
+        Self { front: 1, back: 1 }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ReportBuilder {
     /// Will only display the relevant part of the input if true
-    trim_input: bool,
+    trim_input: Trim,
     /// The full input string thats referenced by the labels
     input: String,
     /// The labels to annotate the input with
@@ -213,7 +256,7 @@ pub struct ReportBuilder {
 impl ReportBuilder {
     pub fn new<I: Into<String>>(input: I) -> Self {
         Self {
-            trim_input: true,
+            trim_input: Trim::default(),
             display_range: false,
             input: input.into(),
             labels: Vec::new(),
@@ -252,7 +295,7 @@ impl ReportBuilder {
         }
     }
 
-    pub fn max_label_length(&mut self, length: usize) -> &mut Self {
+    pub fn max_label_length(mut self, length: usize) -> Self {
         self.max_label_length = length;
         if self.max_child_label_length.is_none() {
             self.max_child_label_length = Some(length + CHILD_LABEL_PADDING);
@@ -260,13 +303,19 @@ impl ReportBuilder {
         self
     }
 
-    pub fn max_child_label_length(&mut self, length: usize) -> &mut Self {
+    pub fn max_child_label_length(mut self, length: usize) -> Self {
         self.max_child_label_length = Some(length);
         self
     }
 
-    pub fn trim_input(&mut self, trim: bool) -> &mut Self {
-        self.trim_input = trim;
+    pub fn trim_input<T: Into<Trim>>(mut self, trim: T) -> Self {
+        self.trim_input = trim.into();
+        self
+    }
+
+    /// Shorhand for `trim_input(Trim::Words(...))`
+    pub fn trim_input_padded<T: Into<TrimPadding>>(mut self, trim: T) -> Self {
+        self.trim_input = Trim::Words(trim.into());
         self
     }
 
@@ -274,9 +323,24 @@ impl ReportBuilder {
         self.labels.push(label);
         self
     }
+    pub fn with_labels<I: Into<Label>, Iter: IntoIterator<Item = I>>(
+        &mut self,
+        labels: Iter,
+    ) -> &mut Self {
+        self.labels.extend(labels.into_iter().map(|l| l.into()));
+        self
+    }
 
     pub fn push<I: Into<Label>>(&mut self, label: I) -> &mut Self {
         self.labels.push(label.into());
+        self
+    }
+
+    pub fn push_iter<I: Into<Label>, Iter: IntoIterator<Item = I>>(
+        &mut self,
+        labels: Iter,
+    ) -> &mut Self {
+        self.labels.extend(labels.into_iter().map(|l| l.into()));
         self
     }
 }
@@ -482,10 +546,11 @@ impl ReportBuilder {
         // Offset to apply to label ranges when trimming the input
         let mut input_label_offset = 0;
 
-        let input = if self.trim_input {
+        let input = if self.trim_input != Trim::None {
             let (trimmed_input, offset) = Report::trim_input(
                 &self.input,
                 self.labels.iter(),
+                self.trim_input,
                 #[cfg(feature = "truncate_out_of_bounds")]
                 {
                     needs_truncate && self.truncate_out_of_bounds as u8 != 0
