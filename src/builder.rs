@@ -1,4 +1,4 @@
-use ::std::fmt::Display;
+use ::std::{fmt::Display, usize};
 #[cfg(feature = "caret_color")]
 use ::token::RgbColor;
 use ::token::{AnsiStyle, LineTokenStream, saturating::SaturatingArithmetic};
@@ -221,6 +221,30 @@ impl<I: Into<TrimPadding>> From<I> for Trim {
     }
 }
 
+impl Trim {
+    pub const fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+    pub const fn is_some(&self) -> bool {
+        !self.is_none()
+    }
+    pub const fn padding(&self) -> Option<TrimPadding> {
+        match self {
+            Self::None => None,
+            Self::Words(padding) | Self::Chars(padding) => Some(*padding),
+        }
+    }
+    pub fn new_by_words<I: Into<TrimPadding>>(padding: I) -> Self {
+        Self::Words(padding.into())
+    }
+    pub fn new_by_chars<I: Into<TrimPadding>>(padding: I) -> Self {
+        Self::Chars(padding.into())
+    }
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::From)]
 pub struct TrimPadding {
     /// The amount of words (bound by whitespace) to include before the first label
@@ -233,7 +257,20 @@ impl Default for TrimPadding {
         Self { front: 1, back: 1 }
     }
 }
-
+// We assume that if only one padding value is given, its for the front
+impl From<usize> for TrimPadding {
+    fn from(padding: usize) -> Self {
+        Self {
+            front: padding,
+            back: usize::MAX,
+        }
+    }
+}
+impl TrimPadding {
+    pub const fn new(front: usize, back: usize) -> Self {
+        Self { front, back }
+    }
+}
 #[derive(Debug, Clone)]
 pub struct ReportBuilder {
     /// Will only display the relevant part of the input if true

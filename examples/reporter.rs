@@ -1,4 +1,8 @@
-use ::reporter::{AnsiStyle, ChildLabel, Error, Label, RangeInclusive, ReportBuilder};
+use ::std::usize;
+
+use ::reporter::{
+    AnsiStyle, ChildLabel, Error, Label, RangeInclusive, ReportBuilder, Trim, TrimPadding,
+};
 
 fn single_line() {
     let mut report = ReportBuilder::new("Longer Test - Another test input");
@@ -339,8 +343,56 @@ fn very_long_input_trimmed_tight() {
     report.write(&mut output).unwrap();
     print!("{}", String::from_utf8_lossy(&output));
 }
+fn very_long_input_trimmed_front() {
+    let mut report =
+        ReportBuilder::new("Very long input that should be trimmed to show only relevant parts")
+            .trim_input_padded(1);
+    let label = Label::new(
+        10..=15,
+        "This is a very long label message that exceeds the input length significantly",
+    );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+fn very_long_input_trimmed_back() {
+    let mut report =
+        ReportBuilder::new("Very long input that should be trimmed to show only relevant parts")
+            .trim_input_padded(TrimPadding::new(usize::MAX, 1));
+    let label: Label = Label::new(
+        21..=27,
+        "This is a very long label message that exceeds the input length significantly",
+    );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
+fn very_long_input_trimmed_chars() {
+    let mut report =
+        ReportBuilder::new("Very long input that should be trimmed to show only relevant parts")
+            .trim_input(Trim::Chars(TrimPadding::new(3, 1)));
+    let label = Label::new(
+        21..=21,
+        "This is a very long label message that exceeds the input length significantly",
+    );
+    report.push(label);
+    let report = report.finish().unwrap();
+    let mut output = Vec::new();
+    report.write(&mut output).unwrap();
+    print!("{}", String::from_utf8_lossy(&output));
+}
 
 fn main() {
+    very_long_input_trimmed_chars();
+    println!("----------------------------------------");
+    very_long_input_trimmed_back();
+    println!("----------------------------------------");
+    very_long_input_trimmed_front();
+    println!("----------------------------------------");
     very_long_input_trimmed_long();
     println!("----------------------------------------");
     very_long_input_trimmed_tight();

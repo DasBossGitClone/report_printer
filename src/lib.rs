@@ -14,7 +14,7 @@ pub mod find_iter;
 pub(crate) use find_iter::*;
 
 pub use ::token::{AnsiStyle, Color, RgbColor, Style, impl_field};
-pub use builder::{ChildLabel, Error, IntoRange, Label, RangeInclusive, ReportBuilder};
+pub use builder::{ChildLabel, Error, IntoRange, Label, RangeInclusive, ReportBuilder, Trim, TrimPadding};
 pub mod config {
     use super::printer;
     pub use printer::set_arrow_label_padding;

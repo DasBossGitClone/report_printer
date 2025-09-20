@@ -140,7 +140,7 @@ impl Report {
         // Add `front` chars of context on the left if possible
         let min_start_padded = min_start.saturating_sub(front);
         // Add `back` chars of context on the right if possible
-        let max_end_padded = (max_end + back).min(input_len);
+        let max_end_padded = (max_end + back.sat_add(1)).min(input_len);
 
         // Ensure we don't go out of bounds
         let trimmed_input = if max_end_padded < input_len {
