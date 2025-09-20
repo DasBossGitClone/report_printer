@@ -1,0 +1,22 @@
+name: Sync to Secondary Account
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '*/30 * * * *'  # Every 30 minutes
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to secondary repo
+        env:
+          DEST_TOKEN: ${{ secrets.DEST_REPO_TOKEN }}
+        run: |
+          git remote add secondary https://$DEST_TOKEN@github.com/account2/repo.git
+          git push secondary --all --force
+          git push secondary --tags --force
